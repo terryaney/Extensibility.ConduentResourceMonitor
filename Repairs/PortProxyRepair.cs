@@ -1,0 +1,60 @@
+using System.Diagnostics;
+
+namespace ConduentResourceMonitor.Repairs;
+
+public class PortProxyRepair : IRepair
+{
+    private readonly AppSettings _settings;
+
+    public string Label => "Repair Port Forwarding";
+    public string TargetCheckName => "PortFwd";
+
+    public PortProxyRepair(AppSettings settings)
+    {
+        _settings = settings;
+    }
+
+    public void Execute()
+    {
+        // Extract hostname from "conduent-resource:8888" -> "conduent-resource"
+        var connectHost = _settings.ProxyAddress.Contains(':')
+            ? _settings.ProxyAddress[.._settings.ProxyAddress.LastIndexOf(':')]
+            : _settings.ProxyAddress;
+
+        var tempBat = Path.Combine(Path.GetTempPath(), "portproxy_repair.bat");
+        File.WriteAllText(tempBat, BuildScript(connectHost));
+
+        Process.Start(new ProcessStartInfo("cmd.exe", $"/c \"{tempBat}\"")
+        {
+            Verb = "runas",
+            UseShellExecute = true
+        });
+    }
+
+    private static string BuildScript(string connectHost) => $"""
+        @echo off
+        echo [%time%] Stopping IP Helper service...
+        sc stop iphlpsvc
+
+        timeout /t 10 /nobreak
+
+        echo [%time%] Starting IP Helper service...
+        sc start iphlpsvc
+
+        timeout /t 15 /nobreak
+
+        echo [%time%] Resetting portproxy rules...
+        netsh interface portproxy reset
+
+        echo [%time%] Adding portproxy rules...
+        netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=8888 connectaddress={connectHost} connectport=8888
+        netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=13389 connectaddress={connectHost} connectport=3389
+
+        echo [%time%] Verifying...
+        netstat -an | findstr "8888\|13389"
+
+        echo [%time%] Done.
+        del "%~f0"
+        pause
+        """;
+}
