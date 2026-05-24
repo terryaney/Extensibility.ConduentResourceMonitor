@@ -17,10 +17,10 @@ public class TrayApp : ApplicationContext
     private readonly Icon _greenIcon;
     private readonly Icon _redIcon;
 
-    public TrayApp(AppMode mode, AppSettings settings, bool showLog)
+    public TrayApp(AppSettings settings, bool showLog, bool repairOnStart = false)
     {
-        _mode = mode;
         _settings = settings;
+        _mode = settings.AppMode!.Value; // validated non-null before TrayApp is constructed
 
         _greenIcon = CreateCircleIcon(Color.LimeGreen);
         _redIcon = CreateCircleIcon(Color.Red);
@@ -30,8 +30,8 @@ public class TrayApp : ApplicationContext
         _pacServer = new PacServerService(settings);
         _pacServer.Start();
 
-        var checks = BuildChecks(mode, settings);
-        _repairs = BuildRepairs(mode, settings);
+        var checks = BuildChecks(_mode, settings);
+        _repairs = BuildRepairs(_mode, settings);
 
         _monitor = new MonitorService(checks, settings.CheckIntervalSeconds);
         _monitor.ResultsUpdated += OnResultsUpdated;
@@ -40,12 +40,18 @@ public class TrayApp : ApplicationContext
         _tray = new NotifyIcon
         {
             Icon = _greenIcon,
-            Text = $"{mode} Monitor - Starting...",
+            Text = $"{_mode} Monitor - Starting...",
             Visible = true,
             ContextMenuStrip = BuildContextMenu()
         };
 
         if (showLog) _logForm.Show();
+
+        if (repairOnStart && _mode == AppMode.Hub)
+        {
+            var repair = _repairs.OfType<PortProxyRepair>().FirstOrDefault();
+            repair?.Execute(startupDelay: true);
+        }
 
         _ = _monitor.Start();
     }
@@ -136,9 +142,15 @@ public class TrayApp : ApplicationContext
         var settingsItem = new ToolStripMenuItem("Settings");
         settingsItem.Click += (_, _) =>
         {
-            using var form = new SettingsForm(_settings, _mode);
+            var oldPort = _settings.PacPort;
+            var oldDir = _settings.PacDirectory;
+            using var form = new SettingsForm(_settings, allowModeChange: false);
             if (form.ShowDialog() == DialogResult.OK)
+            {
                 _monitor.UpdateInterval(_settings.CheckIntervalSeconds);
+                if (_settings.PacPort != oldPort || _settings.PacDirectory != oldDir)
+                    _pacServer.Restart();
+            }
         };
         menu.Items.Add(settingsItem);
 

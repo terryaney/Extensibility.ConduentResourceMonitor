@@ -1,0 +1,57 @@
+{
+	"version": "2.0.0",
+	"inputs": [
+		{
+			"id": "buildType",
+			"type": "pickString",
+			"description": "Select the build configuration",
+			"options": [
+				"Debug",
+				"Release"
+			]
+		}
+	],
+	"tasks": [
+		{
+			"label": "build ConduentResourceMonitor",
+			"isBuildCommand": true,
+			"command": "dotnet",
+			"type": "process",
+			"args": [
+				"build", "${workspaceFolder}\\ConduentResourceMonitor.csproj",
+				"-c", "${input:buildType}",
+				"/property:GenerateFullPaths=true",
+				"/consoleloggerparameters:NoSummary"
+			],
+			"presentation": {
+				"clear": true,
+				"echo": false,
+				"showReuseMessage": false
+			},
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			},
+			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "publish ConduentResourceMonitor (single file)",
+			"command": "dotnet",
+			"type": "process",
+			"args": [
+				"publish", "${workspaceFolder}\\ConduentResourceMonitor.csproj",
+				"-c", "Release",
+				"-r", "win-x64",
+				"-p:PublishSingleFile=true",
+				"/property:GenerateFullPaths=true",
+				"/consoleloggerparameters:NoSummary"
+			],
+			"presentation": {
+				"clear": true,
+				"echo": false,
+				"showReuseMessage": false
+			},
+			"problemMatcher": "$msCompile"
+		}
+	]
+}

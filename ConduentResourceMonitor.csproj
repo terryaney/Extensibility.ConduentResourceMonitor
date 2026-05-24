@@ -10,8 +10,16 @@
     <RootNamespace>ConduentResourceMonitor</RootNamespace>
   </PropertyGroup>
 
+  <!-- Single-file publish: dotnet publish -c Release -r win-x64 -->
+  <!-- Produces one ConduentResourceMonitor.exe; requires .NET 10 on target -->
+  <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
+    <SelfContained>false</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="CommandLineParser" Version="2.9.1" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
   </ItemGroup>
 
 </Project>

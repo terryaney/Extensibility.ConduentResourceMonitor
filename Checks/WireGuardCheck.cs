@@ -1,11 +1,10 @@
-using System.Diagnostics;
+using System.ServiceProcess;
 
 namespace ConduentResourceMonitor.Checks;
 
 public class WireGuardCheck : ICheck
 {
     private readonly AppSettings _settings;
-    private static readonly string WgPath = LocateWg();
 
     public string Name => "WireGuard";
 
@@ -14,35 +13,28 @@ public class WireGuardCheck : ICheck
         _settings = settings;
     }
 
-    private static string LocateWg()
+    public Task<CheckResult> RunAsync()
     {
-        var defaultPath = @"C:\Program Files\WireGuard\wg.exe";
-        return File.Exists(defaultPath) ? defaultPath : "wg";
-    }
-
-    public async Task<CheckResult> RunAsync()
-    {
+        var serviceName = $"WireGuardTunnel${_settings.TunnelName}";
         try
         {
-            var psi = new ProcessStartInfo(WgPath, "show")
-            {
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-            using var process = Process.Start(psi)
-                ?? throw new InvalidOperationException("Failed to start wg.exe");
-            var output = await process.StandardOutput.ReadToEndAsync();
-            await process.WaitForExitAsync();
-
-            return output.Contains($"interface: {_settings.TunnelName}")
-                ? new CheckResult(Name, true, "Tunnel active")
-                : new CheckResult(Name, false, $"'{_settings.TunnelName}' not active");
+            using var sc = new ServiceController(serviceName);
+            var status = sc.Status;
+            return Task.FromResult(
+                status == ServiceControllerStatus.Running
+                    ? new CheckResult(Name, true, "Tunnel service running")
+                    : new CheckResult(Name, false, $"Tunnel service {status}")
+            );
+        }
+        catch (InvalidOperationException)
+        {
+            return Task.FromResult(
+                new CheckResult(Name, false, $"Service '{serviceName}' not found — is tunnel installed?")
+            );
         }
         catch (Exception ex)
         {
-            return new CheckResult(Name, false, ex.Message);
+            return Task.FromResult(new CheckResult(Name, false, ex.Message));
         }
     }
 }

@@ -158,10 +158,7 @@ To enable personal machines to leverage the VPN of `Resource` do the following s
 
 ### Terminal Profiles
 
-The following profiles are needed.  From Windows Terminal, open Settings.  Then click the `Open JSON file` in lower left status bar to add profiles below.
-
-1. `Conduent-Resource - Resource Provider` - Needed on `Resource` machine.
-2. `Conduent-Resource - .pac Provider` - Needed on `Hub` and `Travel` machines.
+The following profile is needed on the `Resource` machine only.  From Windows Terminal, open Settings.  Then click the `Open JSON file` in lower left status bar to add the profile below.
 
 ```json
 {
@@ -177,19 +174,6 @@ The following profiles are needed.  From Windows Terminal, open Settings.  Then 
 		"name": "Conduent-Resource - Resource Provider",
 		"startingDirectory": "C:\\BTR\\Extensibility\\PowerShell"
 },
-{
-	"background": "#08082E",
-	"backgroundImage": "C:\\BTR\\Extensibility\\PowerShell\\Icons\\vpn.png",
-	"backgroundImageAlignment": "bottomRight",
-	"backgroundImageOpacity": 0.1,
-	"backgroundImageStretchMode": "none",
-	"commandline": "pwsh.exe -NoExit -Command \"Write-Host 'DO NOT CLOSE this Terminal tab, it is needed for VPN support.' -ForegroundColor Yellow; python -m http.server 8080\"",
-	"guid": "{b7f9c3e2-4a1e-4d6b-bf0a-9d3a2f8c6e1a}",
-	"hidden": false,
-	"icon": "C:\\BTR\\Extensibility\\PowerShell\\Icons\\vpn.png",
-	"name": "Conduent-Resource - .pac Provider",
-	"startingDirectory": "C:\\BTR\\Extensibility\\PowerShell\\Conduent-Resource"
-},
 ```
 
 ### .pac File Setup
@@ -197,7 +181,7 @@ The following profiles are needed.  From Windows Terminal, open Settings.  Then 
 On the `Hub` and `Travel` machines, perform the following steps.
 
 1. Save the following content to `C:\BTR\Extensibility\ConduentResource\conduent-resource.pac`.
-    ```python
+    ```javascript
     function FindProxyForURL(url, host) {
         // Convert to lowercase for case-insensitive matching
         host = host.toLowerCase();
@@ -215,10 +199,8 @@ On the `Hub` and `Travel` machines, perform the following steps.
         return "DIRECT";
     }
     ```
-2. Install simple HTTP server to serve the `.pac` file.
+2. Install Python — the Resource Monitor uses it to serve the `.pac` file automatically.
   - `winget install Python.Python.3.12 --source winget`, restart Terminal
-  - `python -m http.server 8080`, simple HTTP server for PAC file from directory that contains `.pac` file
-	- **Note**: You can use other simple HTTP servers for local host if desired (i.e. _mongoose_)
 3. In Settings > Network & internet > Proxy, set 'Use setup script' to: `http://localhost:8080/conduent-resource.pac`
   - **NOTE**: If any change in content or location occurs in the `.pac` file, Chrome usually retains a cached copy.  [chrome://net-internals/#proxy](chrome://net-internals/#proxy) can be used to clear the cache and reset the proxy information. 
 
@@ -251,13 +233,56 @@ Create a `C:\BTR\GlobalConfiguration\CamelotSettings.Api.WebService.Proxy.json` 
 	}
 	```
 
+## Resource Monitor
+
+`ConduentResourceMonitor.exe` is a system tray application that monitors the tunnel infrastructure on `Hub` and `Travel` machines. It shows a green circle when all checks pass and red when any fail. Hover text shows per-item status. A Windows notification fires on each new failure.
+
+The exe and its settings files live in `C:\BTR\Extensibility\ConduentResourceMonitor\`.
+
+### What Each Mode Monitors
+
+| Check | Hub | Travel |
+|---|---|---|
+| pproxy / VPN | HTTP to internal Conduent URL via `conduent-resource:8888` | same |
+| Port Forward | TCP connect to `localhost:8888` and `localhost:13389` | TCP connect to `conduent-resource:13389` |
+| PAC Server | — | HTTP to `localhost:8080/conduent-resource.pac` |
+| WireGuard | `wg show` for active tunnel | same |
+
+Both modes start and own the Python PAC server (`python -m http.server`) on launch, killing it cleanly on exit.
+
+### Command Line Options
+
+| Option | Description |
+|---|---|
+`--mode` | Hub or Travel. If omitted, inferred from settings file when exactly one exists.
+`--repair-on-start` | Hub only. Immediately runs port proxy repair on launch (use for startup shortcut).
+`--check-url` | URL for VPN/pproxy health check. Default: https://hrspwebtools001.americas.oneacs.com/msl
+`--tunnel-name` | WireGuard tunnel/service name. Default: Hub-Tunnel or Travel-Tunnel
+`--pac-dir` | Directory containing conduent-resource.pac. Default: C:\BTR\Extensibility\ConduentResource
+`--pac-port` | PAC HTTP server port. Default: 8080
+`--check-interval` | Seconds between checks. Default: 30
+`--notify-timeout` | Notification display time in ms. Default: 5000
+`--show-log` | Open the log window on startup
+
+### Settings
+
+All options are also configurable via right-click → **Settings**. Settings are persisted to `ResourceMonitor.Hub.settings.json` or `ResourceMonitor.Travel.settings.json` next to the exe. Command line args override settings at runtime without writing back.
+
+### Right-Click Actions
+
+Fix actions appear only when the corresponding check is failing:
+
+- **Fix: Repair Port Forwarding** — Hub only. Runs an embedded port proxy repair script elevated (UAC prompt). Stops/starts the IP Helper service and re-applies the `netsh portproxy` rules.
+- **Fix: Restart WireGuard** — Restarts the WireGuard tunnel service elevated (UAC prompt).
+- **Fix: Restart PAC Server** — Travel only. Kills and restarts the Python PAC server process.
+
 ## Start Up Setup
 
-Below are the necessary links/scripts required to enable resource sharing.  All Powershell scripts must be run in Administrative Mode.  All startup links will be created in `~\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup`.
+All startup links are created in `~\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup`.
 
 ### `Resource` Start Up Setup
 
-Create `Conduent-Resource - Resource Provider` to launch `pproxy`. `pproxy` is a lightweight, asynchronous proxy server written entirely in Python. It allows users to set up flexible TCP/UDP tunneling, forward traffic across multiple remote servers using regex rules, and auto-detect incoming connection protocols.
+Create a shortcut to launch `pproxy` via the `Conduent-Resource - Resource Provider` terminal profile.
 
 ```powershell
 $startup = [Environment]::GetFolderPath('Startup')
@@ -274,77 +299,36 @@ $lnk.Save()
 
 ### `Hub` Start Up Setup
 
-1. `netsh portproxy` rules persist across reboots, but the `TCP listener binding` fails silently.  This is a known Windows timing issue.  `portproxy` tries to bind during boot before the network stack is fully read, fails silently and never retries.  To solve that, save the following content to `C:\BTR\Extensibility\ConduentResource\WireguardPortproxy.bat`.
-    ```batchfile
-    @echo off
-    echo [%time%] Starting portproxy setup...
-    
-    timeout /t 60 /nobreak
-    echo [%time%] Stopping iphlpsvc...
-    sc stop iphlpsvc
-    
-    timeout /t 10 /nobreak
-    echo [%time%] Starting iphlpsvc...
-    sc start iphlpsvc
-    
-    timeout /t 15 /nobreak
-    echo [%time%] Resetting portproxy...
-    netsh interface portproxy reset
-    
-    echo [%time%] Adding portproxy rules...
-    netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=8888 connectaddress=corepf2sv9t6 connectport=8888
-    netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=13389 connectaddress=corepf2sv9t6 connectport=3389
-    
-    echo [%time%] Verifying...
-    netstat -an | findstr "8888\|13389"
-    echo [%time%] Done.
-    ```
+Create a single startup shortcut for the Resource Monitor with `--repair-on-start`.
 
-2. Create startup links:
-  - `Conduent-Resource - .pac Provider` to launch local web server to serve up the `.pac` file.
-	- `Conduent-Resource - Port Proxy Restore` to repair failed start up binding.
-
-      ```powershell
-      $startup = [Environment]::GetFolderPath('Startup')
-      $shell = New-Object -ComObject WScript.Shell
-      $wt = (Get-Command wt.exe).Source
-      $proxyDir = "C:\BTR\Extensibility\ConduentResource"
-      
-      $lnk = $shell.CreateShortcut("$startup\Conduent-Resource - .pac Provider.lnk")
-      $lnk.TargetPath = $wt
-      $lnk.Arguments = '-p "Conduent-Resource - .pac Provider" -d "' + $proxyDir + '"'
-      $lnk.WorkingDirectory = $proxyDir
-      $lnk.IconLocation = 'C:\BTR\Extensibility\PowerShell\Icons\vpn.png'
-      $lnk.Save()
-      
-      $lnk = $shell.CreateShortcut("$startup\Conduent-Resource - Port Proxy Restore.lnk")
-      $lnk.TargetPath = 'C:\Windows\System32\cmd.exe'
-      $lnk.Arguments = '/c "C:\BTR\Extensibility\ConduentResource\WireguardPortproxy.bat"'
-      $lnk.WorkingDirectory = $proxyDir
-      $lnk.IconLocation = 'C:\BTR\Extensibility\PowerShell\Icons\vpn.png'
-      $lnk.WindowStyle = 1  # normal window so you can see the output
-      $lnk.Save()
-      
-      $bytes = [System.IO.File]::ReadAllBytes("$startup\Conduent-Resource - Port Proxy Restore.lnk")
-      $bytes[0x15] = $bytes[0x15] -bor 0x20
-      [System.IO.File]::WriteAllBytes("$startup\Conduent-Resource - Port Proxy Restore.lnk", $bytes)
-      ```
-
-### `Travel` Start Up Setup
-
-Create `Conduent-Resource - .pac Provider` to launch local web server to serve up the `.pac` file.
+**Note**: `netsh portproxy` rules persist across reboots but the TCP listener binding fails silently — a known Windows timing issue where portproxy tries to bind before the network stack is fully ready. The `--repair-on-start` flag handles this automatically: the monitor fires the repair script with a 60-second startup delay, then continues monitoring. The tray icon will show red for PortFwd during that window.
 
 ```powershell
 $startup = [Environment]::GetFolderPath('Startup')
 $shell = New-Object -ComObject WScript.Shell
-$wt = (Get-Command wt.exe).Source
-$proxyDir = "C:\BTR\Extensibility\ConduentResource"
+$monitorDir = "C:\BTR\Extensibility\ConduentResource"
 
-$lnk = $shell.CreateShortcut("$startup\Conduent-Resource - .pac Provider.lnk")
-$lnk.TargetPath = $wt
-$lnk.Arguments = '-p "Conduent-Resource - .pac Provider" -d "' + $proxyDir + '"'
-$lnk.WorkingDirectory = $proxyDir
+$lnk = $shell.CreateShortcut("$startup\Conduent Resource Monitor - Hub.lnk")
+$lnk.TargetPath = "$monitorDir\ConduentResourceMonitor.exe"
+$lnk.Arguments = '--mode Hub --repair-on-start'
+$lnk.WorkingDirectory = $monitorDir
 $lnk.IconLocation = 'C:\BTR\Extensibility\PowerShell\Icons\vpn.png'
 $lnk.Save()
+```
 
+### `Travel` Start Up Setup
+
+Create a single startup shortcut for the Resource Monitor.
+
+```powershell
+$startup = [Environment]::GetFolderPath('Startup')
+$shell = New-Object -ComObject WScript.Shell
+$monitorDir = "C:\BTR\Extensibility\ConduentResource"
+
+$lnk = $shell.CreateShortcut("$startup\Conduent Resource Monitor - Travel.lnk")
+$lnk.TargetPath = "$monitorDir\ConduentResourceMonitor.exe"
+$lnk.Arguments = '--mode Travel'
+$lnk.WorkingDirectory = $monitorDir
+$lnk.IconLocation = 'C:\BTR\Extensibility\PowerShell\Icons\vpn.png'
+$lnk.Save()
 ```

@@ -6,8 +6,12 @@ public enum AppMode { Hub, Travel }
 
 public class Options
 {
-    [Option("mode", Required = true, HelpText = "Hub or Travel")]
-    public AppMode Mode { get; set; }
+    [Option("mode", Required = false, HelpText = "Hub or Travel. If omitted, inferred from settings file if exactly one exists.")]
+    public AppMode? Mode { get; set; }
+
+    // CLI-only — intentionally absent from AppSettings so it is never persisted
+    [Option("repair-on-start", Required = false, HelpText = "Hub only: immediately run port proxy repair on launch (use for startup shortcut)")]
+    public bool RepairOnStart { get; set; }
 
     [Option("check-url", Required = false, HelpText = "URL for VPN/pproxy health check")]
     public string? CheckUrl { get; set; }

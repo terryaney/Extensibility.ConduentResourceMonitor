@@ -14,15 +14,16 @@ public class PortProxyRepair : IRepair
         _settings = settings;
     }
 
-    public void Execute()
+    public void Execute() => Execute(startupDelay: false);
+
+    public void Execute(bool startupDelay)
     {
-        // Extract hostname from "conduent-resource:8888" -> "conduent-resource"
         var connectHost = _settings.ProxyAddress.Contains(':')
             ? _settings.ProxyAddress[.._settings.ProxyAddress.LastIndexOf(':')]
             : _settings.ProxyAddress;
 
         var tempBat = Path.Combine(Path.GetTempPath(), "portproxy_repair.bat");
-        File.WriteAllText(tempBat, BuildScript(connectHost));
+        File.WriteAllText(tempBat, BuildScript(connectHost, startupDelay));
 
         Process.Start(new ProcessStartInfo("cmd.exe", $"/c \"{tempBat}\"")
         {
@@ -31,8 +32,9 @@ public class PortProxyRepair : IRepair
         });
     }
 
-    private static string BuildScript(string connectHost) => $"""
+    private static string BuildScript(string connectHost, bool startupDelay) => $"""
         @echo off
+        {(startupDelay ? "echo [%time%] Waiting for network stack to settle...\r\ntimeout /t 60 /nobreak\r\n" : "")}
         echo [%time%] Stopping IP Helper service...
         sc stop iphlpsvc
 
