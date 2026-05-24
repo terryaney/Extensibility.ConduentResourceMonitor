@@ -36,6 +36,16 @@
 		},
 		{
 			"label": "publish ConduentResourceMonitor (single file)",
+			"dependsOrder": "sequence",
+			"dependsOn": [
+				"publish ConduentResourceMonitor (single file) - publish",
+				"publish ConduentResourceMonitor (single file) - copy"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "publish ConduentResourceMonitor (single file) - publish",
+			"hide": true,
 			"command": "dotnet",
 			"type": "process",
 			"args": [
@@ -52,6 +62,20 @@
 				"showReuseMessage": false
 			},
 			"problemMatcher": "$msCompile"
+		},
+		{
+			"label": "publish ConduentResourceMonitor (single file) - copy",
+			"hide": true,
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-Command",
+				"Copy-Item -Path '${workspaceFolder}\\bin\\Release\\net10.0-windows\\win-x64\\publish\\ConduentResourceMonitor.exe' -Destination 'C:\\BTR\\Extensibility\\ConduentResource\\ConduentResourceMonitor.exe' -Force"
+			],
+			"presentation": {
+				"reveal": "silent"
+			},
+			"problemMatcher": []
 		}
 	]
 }

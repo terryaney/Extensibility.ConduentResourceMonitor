@@ -1,5 +1,6 @@
 using CommandLine;
 using ConduentResourceMonitor;
+using ConduentResourceMonitor.Setup;
 
 internal static class Program
 {
@@ -24,6 +25,40 @@ internal static class Program
     }
 
     static void Run(Options options)
+    {
+        if (options.Setup.HasValue)
+        {
+            RunSetup(options.Setup.Value, options);
+            return;
+        }
+
+        if (options.AddTravelConfig)
+        {
+            Application.Run(new AddTravelConfigForm(options));
+            return;
+        }
+
+        RunMonitor(options);
+    }
+
+    static void RunSetup(SetupMode mode, Options options)
+    {
+        var ctx = new SetupContext
+        {
+            ConfDirectory = options.ConfDirectory ?? @"C:\BTR\Extensibility\ConduentResource",
+            ConfFilePath = options.ConfFile ?? ""
+        };
+
+        if (mode != SetupMode.Resource)
+        {
+            using var preflight = new SetupPreflightForm(mode, ctx);
+            if (preflight.ShowDialog() != DialogResult.OK) return;
+        }
+
+        Application.Run(new SetupWizardForm(mode, ctx));
+    }
+
+    static void RunMonitor(Options options)
     {
         var settings = AppSettings.Load();
         settings.ApplyOverrides(options); // --mode overrides saved mode; --repair-on-start never touches settings
