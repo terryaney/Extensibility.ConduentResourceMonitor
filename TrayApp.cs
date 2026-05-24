@@ -78,7 +78,10 @@ public class TrayApp : ApplicationContext
     {
         var repairs = new List<IRepair>();
         if (mode == AppMode.Hub)
+        {
+            repairs.Add(new ResourcePproxyRepair());
             repairs.Add(new PortProxyRepair(settings));
+        }
         repairs.Add(new WireGuardRepair(settings));
         if (mode == AppMode.Travel)
             repairs.Add(new PacServerRepair(_pacServer));

@@ -1,15 +1,49 @@
+using System.Runtime.InteropServices;
 using CommandLine;
 using ConduentResourceMonitor;
 using ConduentResourceMonitor.Setup;
 
 internal static class Program
 {
+    [DllImport("kernel32.dll")]
+    private static extern bool AttachConsole(int dwProcessId);
+
     [STAThread]
     static void Main(string[] args)
     {
         Application.SetHighDpiMode(HighDpiMode.SystemAware);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
+
+        var setupIdx = Array.FindIndex(args, a => a.Equals("--setup", StringComparison.OrdinalIgnoreCase));
+        if (setupIdx >= 0)
+        {
+            var hasMode = setupIdx + 1 < args.Length &&
+                          Enum.TryParse<SetupMode>(args[setupIdx + 1], ignoreCase: true, out _);
+            if (!hasMode)
+            {
+                using var picker = new SetupModePicker();
+                if (picker.ShowDialog() != DialogResult.OK) return;
+                var list = args.ToList();
+                list.Insert(setupIdx + 1, picker.SelectedMode.ToString());
+                args = [.. list];
+            }
+        }
+
+        if (args.Any(a => a is "-?" or "/?" or "--help" or "-h"))
+        {
+            AttachConsole(-1);
+            using var stdout = new StreamWriter(Console.OpenStandardOutput(), leaveOpen: true) { AutoFlush = true };
+            Console.SetOut(stdout);
+
+            AppMode? mode = null;
+            var modeIdx = Array.FindIndex(args, a => a.Equals("--mode", StringComparison.OrdinalIgnoreCase));
+            if (modeIdx >= 0 && modeIdx + 1 < args.Length &&
+                Enum.TryParse<AppMode>(args[modeIdx + 1], ignoreCase: true, out var m))
+                mode = m;
+            WriteHelp(mode);
+            return;
+        }
 
         Parser.Default.ParseArguments<Options>(args)
             .WithParsed(Run)
@@ -82,6 +116,108 @@ internal static class Program
         }
 
         Application.Run(new TrayApp(settings, options.ShowLog, options.RepairOnStart));
+    }
+
+    static void WriteHelp(AppMode? mode)
+    {
+        const int col = 34; // 2-space indent + 32 chars for flag/padding
+
+        void Opt(string flag, string desc, string? note = null)
+        {
+            Console.WriteLine(("  " + flag).PadRight(col) + desc);
+            if (note != null)
+                Console.WriteLine("".PadRight(col) + note);
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("Conduent Resource Monitor");
+        Console.WriteLine();
+
+        if (mode == AppMode.Hub)
+        {
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  ConduentResourceMonitor.exe --mode Hub [options]");
+            Console.WriteLine();
+            Console.WriteLine("What Hub Monitors:");
+            Console.WriteLine("  VPN/pproxy    HTTP to internal Conduent URL via conduent-resource:8888");
+            Console.WriteLine("  Port Forward  TCP connect to localhost:8888 and localhost:13389");
+            Console.WriteLine("  WireGuard     Hub-Tunnel service running");
+            Console.WriteLine();
+            Console.WriteLine("Options:");
+            Opt("--repair-on-start", "Run port proxy repair on launch (60 s delay).",
+                "Use in startup shortcut to handle Windows boot timing.");
+            Opt("--check-url <url>", "URL for VPN/pproxy health check.",
+                "Default: https://hrspwebtools001.americas.oneacs.com/msl");
+            Opt("--tunnel-name <name>", "WireGuard tunnel service name. Default: Hub-Tunnel");
+            Opt("--pac-dir <path>", "Directory containing conduent-resource.pac.",
+                @"Default: C:\BTR\Extensibility\ConduentResource");
+            Opt("--pac-port <n>", "PAC HTTP server port. Default: 8080");
+            Opt("--check-interval <n>", "Seconds between health checks. Default: 30");
+            Opt("--notify-timeout <n>", "Notification display time in ms. Default: 5000");
+            Opt("--show-log", "Open log window on startup.");
+            Console.WriteLine();
+            Console.WriteLine("Tip: Run -? without --mode for full help including setup options.");
+        }
+        else if (mode == AppMode.Travel)
+        {
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  ConduentResourceMonitor.exe --mode Travel [options]");
+            Console.WriteLine();
+            Console.WriteLine("What Travel Monitors:");
+            Console.WriteLine("  VPN/pproxy    HTTP to internal Conduent URL via conduent-resource:8888");
+            Console.WriteLine("  Port Forward  TCP connect to conduent-resource:13389");
+            Console.WriteLine("  PAC Server    HTTP to localhost:8080/conduent-resource.pac");
+            Console.WriteLine("  WireGuard     Travel tunnel service running");
+            Console.WriteLine();
+            Console.WriteLine("Options:");
+            Opt("--check-url <url>", "URL for VPN/pproxy health check.",
+                "Default: https://hrspwebtools001.americas.oneacs.com/msl");
+            Opt("--tunnel-name <name>", "WireGuard tunnel service name. Default: Travel-Tunnel");
+            Opt("--pac-dir <path>", "Directory containing conduent-resource.pac.",
+                @"Default: C:\BTR\Extensibility\ConduentResource");
+            Opt("--pac-port <n>", "PAC HTTP server port. Default: 8080");
+            Opt("--check-interval <n>", "Seconds between health checks. Default: 30");
+            Opt("--notify-timeout <n>", "Notification display time in ms. Default: 5000");
+            Opt("--show-log", "Open log window on startup.");
+            Console.WriteLine();
+            Console.WriteLine("Tip: Run -? without --mode for full help including setup options.");
+        }
+        else
+        {
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  ConduentResourceMonitor.exe --mode Hub|Travel [options]");
+            Console.WriteLine("  ConduentResourceMonitor.exe --setup Hub|Travel|Resource [options]");
+            Console.WriteLine("  ConduentResourceMonitor.exe --add-travel-config");
+            Console.WriteLine("  ConduentResourceMonitor.exe -? [--mode Hub|Travel]");
+            Console.WriteLine();
+            Console.WriteLine("Monitor Options:");
+            Opt("--mode <Hub|Travel>", "Select mode. Inferred from settings file if exactly one exists.");
+            Opt("--check-url <url>", "URL for VPN/pproxy health check.",
+                "Default: https://hrspwebtools001.americas.oneacs.com/msl");
+            Opt("--tunnel-name <name>", "WireGuard tunnel/service name.",
+                "Default: Hub-Tunnel (Hub) or Travel-Tunnel (Travel)");
+            Opt("--pac-dir <path>", "Directory containing conduent-resource.pac.",
+                @"Default: C:\BTR\Extensibility\ConduentResource");
+            Opt("--pac-port <n>", "PAC HTTP server port. Default: 8080");
+            Opt("--check-interval <n>", "Seconds between health checks. Default: 30");
+            Opt("--notify-timeout <n>", "Notification display time in ms. Default: 5000");
+            Opt("--show-log", "Open log window on startup.");
+            Console.WriteLine();
+            Console.WriteLine("Hub-Only Monitor Options:");
+            Opt("--repair-on-start", "Run port proxy repair on launch (60 s delay).",
+                "Use in startup shortcut to handle Windows boot timing.");
+            Console.WriteLine();
+            Console.WriteLine("Setup Options:");
+            Opt("--setup <Hub|Travel|Resource>", "Run guided setup wizard.");
+            Opt("--add-travel-config", "Add a new Travel machine to an existing Hub config.");
+            Opt("--conf-dir <path>", "Directory for WireGuard .conf files.",
+                @"Default: C:\BTR\Extensibility\ConduentResource");
+            Opt("--conf-file <path>", "Travel setup: path to the .conf file generated on Hub.");
+            Console.WriteLine();
+            Console.WriteLine("Tip: Run -? --mode Hub or -? --mode Travel for mode-specific help.");
+        }
+
+        Console.WriteLine();
     }
 
     static void ShowError(string message) =>

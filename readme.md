@@ -34,7 +34,9 @@ The result: `Hub` uses `conduent-resource:8888` for corporate traffic. `Travel` 
 
 ### Setup Order
 
-Run these in order. Each command opens a guided wizard.
+Run these in order on each machine. Each command opens a guided wizard.
+
+**0. All machines** — Create `C:\BTR\Extensibility\ConduentResource\` and copy `ConduentResourceMonitor.exe` into it.
 
 **1. Resource** (on the Conduent laptop)
 ```
@@ -87,6 +89,7 @@ Both modes start and own the Python PAC server (`python -m http.server`) on laun
 
 Fix actions appear only when the corresponding check is failing:
 
+- **Fix: Resource pproxy** — Hub only. Shows a reminder to RDP to the Resource machine, verify VPN is connected, and confirm the "Conduent-Resource - Resource Provider" terminal profile is running.
 - **Fix: Repair Port Forwarding** — Hub only. Runs an embedded repair script elevated (UAC). Stops/starts the IP Helper service and re-applies `netsh portproxy` rules.
 - **Fix: Restart WireGuard** — Restarts the WireGuard tunnel service elevated (UAC).
 - **Fix: Restart PAC Server** — Travel only. Kills and restarts the Python PAC server process.

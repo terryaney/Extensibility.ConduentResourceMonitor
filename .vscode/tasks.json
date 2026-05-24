@@ -70,7 +70,7 @@
 			"command": "powershell",
 			"args": [
 				"-Command",
-				"Copy-Item -Path '${workspaceFolder}\\bin\\Release\\net10.0-windows\\win-x64\\publish\\ConduentResourceMonitor.exe' -Destination 'C:\\BTR\\Extensibility\\ConduentResource\\ConduentResourceMonitor.exe' -Force"
+				"$destinationDir = 'C:\\BTR\\Extensibility\\ConduentResource'; $sourcePath = '${workspaceFolder}\\bin\\Release\\net10.0-windows\\win-x64\\publish\\ConduentResourceMonitor.exe'; $destinationPath = Join-Path -Path $destinationDir -ChildPath 'ConduentResourceMonitor.exe'; if (-not (Test-Path -LiteralPath $destinationDir)) { New-Item -ItemType Directory -Path $destinationDir -Force | Out-Null }; Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Force"
 			],
 			"presentation": {
 				"reveal": "silent"
