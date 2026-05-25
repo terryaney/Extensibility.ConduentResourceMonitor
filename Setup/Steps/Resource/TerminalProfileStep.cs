@@ -2,51 +2,51 @@ namespace ConduentResourceMonitor.Setup.Steps.Resource;
 
 public class TerminalProfileStep : ISetupStep
 {
-    private const string ProfileGuid = "{7c2d8c34-4f7a-4d1f-8f5d-8b7c4b6b9cda}";
+	private const string ProfileGuid = "{7c2d8c34-4f7a-4d1f-8f5d-8b7c4b6b9cda}";
 
-    public string Title => "Add Windows Terminal Profile";
-    public string Description =>
-        """
+	public string Title => "Add Windows Terminal Profile";
+	public string Description =>
+		"""
         Adds the 'Conduent-Resource - Resource Provider' profile to Windows Terminal.
         This profile runs pproxy automatically with a visible warning not to close the tab.
 
         Hard block: Windows Terminal must be installed. Install from the Microsoft Store if needed.
         """;
-    public bool RequiresElevation => false;
-    public bool IsManual => false;
-    public bool CanSkip => false;
+	public bool RequiresElevation => false;
+	public bool IsManual => false;
+	public bool CanSkip => false;
 
-    public async Task<bool> IsApplicableAsync()
-    {
-        var path = FindSettingsPath();
-        return path != null;
-    }
+	public Task<bool> IsApplicableAsync()
+	{
+		var path = FindSettingsPath();
+		return Task.FromResult( path != null );
+	}
 
-    public Task<bool> IsAlreadyCompleteAsync()
-    {
-        var path = FindSettingsPath();
-        if (path == null) return Task.FromResult(false);
-        try
-        {
-            var content = File.ReadAllText(path);
-            return Task.FromResult(content.Contains(ProfileGuid, StringComparison.OrdinalIgnoreCase));
-        }
-        catch
-        {
-            return Task.FromResult(false);
-        }
-    }
+	public Task<bool> IsAlreadyCompleteAsync()
+	{
+		var path = FindSettingsPath();
+		if ( path == null ) return Task.FromResult( false );
+		try
+		{
+			var content = File.ReadAllText( path );
+			return Task.FromResult( content.Contains( ProfileGuid, StringComparison.OrdinalIgnoreCase ) );
+		}
+		catch
+		{
+			return Task.FromResult( false );
+		}
+	}
 
-    public async Task<SetupStepResult> RunAsync(IProgress<string> progress)
-    {
-        var settingsPath = FindSettingsPath();
-        if (settingsPath == null)
-            return new SetupStepResult(false, "Windows Terminal settings.json not found. Install Windows Terminal from the Microsoft Store first.");
+	public async Task<SetupStepResult> RunAsync( IProgress<string> progress )
+	{
+		var settingsPath = FindSettingsPath();
+		if ( settingsPath == null )
+			return new SetupStepResult( false, "Windows Terminal settings.json not found. Install Windows Terminal from the Microsoft Store first." );
 
-        progress.Report($"Editing: {settingsPath}");
+		progress.Report( $"Editing: {settingsPath}" );
 
-        var script = $$"""
-            $settingsPath = '{{settingsPath.Replace("'", "''")}}'
+		var script = $$"""
+            $settingsPath = '{{settingsPath.Replace( "'", "''" )}}'
             $guid = '{{ProfileGuid}}'
             $content = Get-Content $settingsPath -Raw
             if ($content -match [regex]::Escape($guid)) {
@@ -72,28 +72,31 @@ public class TerminalProfileStep : ISetupStep
             Write-Output "Profile added successfully."
             """;
 
-        var (code, output) = await ProcessHelper.RunPowerShellAsync(script);
-        progress.Report(output);
-        var ok = await IsAlreadyCompleteAsync();
-        return new SetupStepResult(ok, ok ? "Terminal profile added." : $"Could not verify profile. Exit code: {code}");
-    }
+		var (code, output) = await ProcessHelper.RunPowerShellAsync( script );
+		progress.Report( output );
 
-    private static string? FindSettingsPath()
-    {
-        // Store version
-        var localApp = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var storeGlob = Path.Combine(localApp, "Packages");
-        if (Directory.Exists(storeGlob))
-        {
-            foreach (var dir in Directory.GetDirectories(storeGlob, "Microsoft.WindowsTerminal*"))
-            {
-                var path = Path.Combine(dir, "LocalState", "settings.json");
-                if (File.Exists(path)) return path;
-            }
-        }
-        // Unpackaged / preview
-        var altPath = Path.Combine(localApp, "Microsoft", "Windows Terminal", "settings.json");
-        if (File.Exists(altPath)) return altPath;
-        return null;
-    }
+		var ok = await IsAlreadyCompleteAsync();
+		return new SetupStepResult( ok, ok ? "Terminal profile added." : $"Could not verify profile. Exit code: {code}" );
+	}
+
+	private static string? FindSettingsPath()
+	{
+		// Store version
+		var localApp = Environment.GetFolderPath( Environment.SpecialFolder.LocalApplicationData );
+		var storeGlob = Path.Combine( localApp, "Packages" );
+
+		if ( Directory.Exists( storeGlob ) )
+		{
+			foreach ( var dir in Directory.GetDirectories( storeGlob, "Microsoft.WindowsTerminal*" ) )
+			{
+				var path = Path.Combine( dir, "LocalState", "settings.json" );
+				if ( File.Exists( path ) ) return path;
+			}
+		}
+
+		// Unpackaged / preview
+		var altPath = Path.Combine( localApp, "Microsoft", "Windows Terminal", "settings.json" );
+		if ( File.Exists( altPath ) ) return altPath;
+		return null;
+	}
 }

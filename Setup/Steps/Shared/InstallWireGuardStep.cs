@@ -1,25 +1,26 @@
 namespace ConduentResourceMonitor.Setup.Steps.Shared;
 
-public class InstallWireGuardStep(bool canSkip = true) : ISetupStep
+public class InstallWireGuardStep( bool canSkip = true ) : ISetupStep
 {
-    public string Title => "Install WireGuard";
-    public string Description => "Installs WireGuard using winget. WireGuard's own installer will prompt for administrator access.";
-    public bool RequiresElevation => false;
-    public bool IsManual => false;
-    public bool CanSkip => canSkip;
+	public string Title => "Install WireGuard";
+	public string Description => "Installs WireGuard using winget. WireGuard's own installer will prompt for administrator access.";
+	public bool RequiresElevation => false;
+	public bool IsManual => false;
+	public bool CanSkip => canSkip;
 
-    public async Task<bool> IsAlreadyCompleteAsync()
-    {
-        var (code, _) = await ProcessHelper.RunAsync("wg", "--version");
-        return code == 0;
-    }
+	public async Task<bool> IsAlreadyCompleteAsync()
+	{
+		var (code, _) = await ProcessHelper.RunAsync( "wg", "--version" );
+		return code == 0;
+	}
 
-    public async Task<SetupStepResult> RunAsync(IProgress<string> progress)
-    {
-        progress.Report("Running: winget install WireGuard.WireGuard ...");
-        var (code, output) = await ProcessHelper.RunAsync("winget", "install WireGuard.WireGuard --source winget --accept-source-agreements --accept-package-agreements");
-        progress.Report(output);
-        var ok = await IsAlreadyCompleteAsync();
-        return new SetupStepResult(ok, ok ? "WireGuard installed successfully." : "WireGuard install may have failed. Check output above.");
-    }
+	public async Task<SetupStepResult> RunAsync( IProgress<string> progress )
+	{
+		progress.Report( "Running: winget install WireGuard.WireGuard ..." );
+		var (_, output) = await ProcessHelper.RunAsync( "winget", "install WireGuard.WireGuard --source winget --accept-source-agreements --accept-package-agreements" );
+		progress.Report( output );
+		
+		var ok = await IsAlreadyCompleteAsync();
+		return new SetupStepResult( ok, ok ? "WireGuard installed successfully." : "WireGuard install may have failed. Check output above." );
+	}
 }

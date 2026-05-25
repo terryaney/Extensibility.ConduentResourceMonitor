@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.RegularExpressions;
 
 namespace ConduentResourceMonitor.Setup;
@@ -181,24 +180,11 @@ public class AddTravelConfigForm : Form
 
 	private static async Task<string> RunWgCommand( string args, string? stdin = null )
 	{
-		var psi = new ProcessStartInfo( "wg", args )
-		{
-			RedirectStandardOutput = true,
-			RedirectStandardInput = stdin != null,
-			UseShellExecute = false,
-			CreateNoWindow = true
-		};
+		var ( exitCode, output ) = stdin == null
+			? await ProcessHelper.RunAsync( "wg", args )
+			: await ProcessHelper.RunWithInputAsync( "wg", args, stdin );
 
-		using var p = Process.Start( psi )!;
-		if ( stdin != null )
-		{
-			await p.StandardInput.WriteLineAsync( stdin );
-			p.StandardInput.Close();
-		}
-		var output = await p.StandardOutput.ReadToEndAsync();
-		await p.WaitForExitAsync();
-		
-		return output.Trim();
+		return ProcessHelper.ValidateWireGuardKeyOutput( $"wg {args}", exitCode, output, "WireGuard" );
 	}
 
 	private static string ExtractHubPublicKey( string hubConfText )

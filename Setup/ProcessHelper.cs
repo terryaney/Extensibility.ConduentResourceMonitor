@@ -15,6 +15,7 @@ internal sealed class ElevatedCommand
 internal static class ProcessHelper
 {
 	public const string WireGuardExePath = @"C:\Program Files\WireGuard\wireguard.exe";
+	private static readonly Regex WireGuardKeyRegex = new( "^[A-Za-z0-9+/]{43}=$", RegexOptions.Compiled );
 
 	private static readonly Dictionary<string, string> AllowedElevatedExecutables = new( StringComparer.OrdinalIgnoreCase )
 	{
@@ -200,6 +201,18 @@ internal static class ProcessHelper
 
 	public static bool IsSafeHostAliasToken( string token ) =>
 		!string.IsNullOrWhiteSpace( token ) && Regex.IsMatch( token, "^[A-Za-z0-9._-]+$" );
+
+	public static string ValidateWireGuardKeyOutput( string command, int exitCode, string output, string keyType )
+	{
+		if ( exitCode != 0 )
+			throw new InvalidOperationException( $"{command} failed with exit code {exitCode}: {output}" );
+
+		var key = output.Trim();
+		if ( !WireGuardKeyRegex.IsMatch( key ) )
+			throw new InvalidOperationException( $"{command} returned invalid {keyType} key output." );
+
+		return key;
+	}
 
 	private static List<ElevatedCommand> NormalizeElevatedCommands( IReadOnlyList<ElevatedCommand> commands )
 	{

@@ -1,40 +1,34 @@
 namespace ConduentResourceMonitor.Setup.Steps.Shared;
 
-public class CreatePacFileStep : ISetupStep
+public class CreatePacFileStep( string confDirectory ) : ISetupStep
 {
-    private readonly string _confDirectory;
-    private string PacPath => Path.Combine(_confDirectory, "conduent-resource.pac");
+	private readonly string _confDirectory = confDirectory;
+	private string PacPath => Path.Combine( _confDirectory, "conduent-resource.pac" );
 
-    public string Title => "Create PAC File";
-    public string Description => $"Creates the conduent-resource.pac proxy auto-config file in:\r\n{_confDirectory}";
-    public bool RequiresElevation => false;
-    public bool IsManual => false;
-    public bool CanSkip => false;
+	public string Title => "Create PAC File";
+	public string Description => $"Creates the conduent-resource.pac proxy auto-config file in:\r\n{_confDirectory}";
+	public bool RequiresElevation => false;
+	public bool IsManual => false;
+	public bool CanSkip => false;
 
-    public CreatePacFileStep(string confDirectory)
-    {
-        _confDirectory = confDirectory;
-    }
+	public Task<bool> IsAlreadyCompleteAsync() => Task.FromResult( File.Exists( PacPath ) );
 
-    public Task<bool> IsAlreadyCompleteAsync() =>
-        Task.FromResult(File.Exists(PacPath));
+	public Task<SetupStepResult> RunAsync( IProgress<string> progress )
+	{
+		try
+		{
+			Directory.CreateDirectory( _confDirectory );
+			File.WriteAllText( PacPath, PacContent );
+			progress.Report( $"Created: {PacPath}" );
+			return Task.FromResult( new SetupStepResult( true, "PAC file created." ) );
+		}
+		catch ( Exception ex )
+		{
+			return Task.FromResult( new SetupStepResult( false, ex.Message ) );
+		}
+	}
 
-    public Task<SetupStepResult> RunAsync(IProgress<string> progress)
-    {
-        try
-        {
-            Directory.CreateDirectory(_confDirectory);
-            File.WriteAllText(PacPath, PacContent);
-            progress.Report($"Created: {PacPath}");
-            return Task.FromResult(new SetupStepResult(true, "PAC file created."));
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult(new SetupStepResult(false, ex.Message));
-        }
-    }
-
-    private const string PacContent = """
+	private const string PacContent = """
         function FindProxyForURL(url, host) {
             host = host.toLowerCase();
             url = url.toLowerCase();
