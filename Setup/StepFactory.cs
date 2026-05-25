@@ -39,7 +39,7 @@ internal static class StepFactory
 
     private static List<ISetupStep> BuildTravel(SetupContext ctx) =>
     [
-        new InstallWireGuardStep(),
+        new InstallWireGuardStep(canSkip: false),
         new VerifyConfFileStep(ctx),
         new InstallTravelTunnelStep(ctx),
         new HostsFileStep("10.0.0.1", "conduent-resource"),

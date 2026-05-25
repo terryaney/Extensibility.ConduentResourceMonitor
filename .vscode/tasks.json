@@ -66,11 +66,15 @@
 		{
 			"label": "publish ConduentResourceMonitor (single file) - copy",
 			"hide": true,
-			"type": "shell",
-			"command": "powershell",
+			"type": "process",
+			"command": "powershell.exe",
 			"args": [
+				"-NoProfile",
+				"-NonInteractive",
+				"-ExecutionPolicy",
+				"Bypass",
 				"-Command",
-				"$destinationDir = 'C:\\BTR\\Extensibility\\ConduentResource'; $sourcePath = '${workspaceFolder}\\bin\\Release\\net10.0-windows\\win-x64\\publish\\ConduentResourceMonitor.exe'; $destinationPath = Join-Path -Path $destinationDir -ChildPath 'ConduentResourceMonitor.exe'; if (-not (Test-Path -LiteralPath $destinationDir)) { New-Item -ItemType Directory -Path $destinationDir -Force | Out-Null }; Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Force"
+				"& { $destinationDir = 'C:\\BTR\\Extensibility\\ConduentResource'; $sourcePath = '${workspaceFolder}\\bin\\Release\\net10.0-windows\\win-x64\\publish\\ConduentResourceMonitor.exe'; if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) { throw \"Published executable not found: $sourcePath\" }; New-Item -ItemType Directory -Path $destinationDir -Force | Out-Null; $destinationPath = Join-Path -Path $destinationDir -ChildPath 'ConduentResourceMonitor.exe'; Copy-Item -LiteralPath $sourcePath -Destination $destinationPath -Force }"
 			],
 			"presentation": {
 				"reveal": "silent"

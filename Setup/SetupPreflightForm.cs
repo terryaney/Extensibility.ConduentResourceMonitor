@@ -23,6 +23,15 @@ public class SetupPreflightForm : Form
         _mode = mode;
         _ctx = ctx;
 
+        // Load existing settings if available to pre-fill form
+        var settings = AppSettings.Load();
+        if (!string.IsNullOrEmpty(settings.PacDirectory) &&
+            ctx.ConfDirectory == @"C:\BTR\Extensibility\ConduentResource")
+        {
+            // Use saved PAC directory instead of default
+            ctx.ConfDirectory = settings.PacDirectory;
+        }
+
         Text = $"Conduent Resource Setup — {mode} Configuration";
         StartPosition = FormStartPosition.CenterScreen;
         FormBorderStyle = FormBorderStyle.FixedDialog;
@@ -145,41 +154,55 @@ public class SetupPreflightForm : Form
 
     private Control BuildTravelContent()
     {
-        var layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 3,
-            Padding = new Padding(12, 12, 12, 4),
-            AutoSize = false
-        };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        var outer = new Panel { Dock = DockStyle.Fill, Padding = new Padding(12, 10, 12, 4) };
 
         var note = new Label
         {
             Text = "Select the WireGuard .conf file generated on Hub for this machine.",
-            Dock = DockStyle.Fill,
-            AutoSize = false,
-            Margin = new Padding(0, 0, 0, 8)
+            Dock = DockStyle.Top,
+            Height = 28,
+            TextAlign = ContentAlignment.MiddleLeft
         };
-        layout.Controls.Add(note);
-        layout.SetColumnSpan(note, 3);
 
-        var lblFile = new Label { Text = "Config File (.conf):", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Right, Margin = new Padding(0, 8, 8, 2) };
-        _tbConfFile = new TextBox { Text = _ctx.ConfFilePath, Dock = DockStyle.Fill, Margin = new Padding(0, 5, 4, 2), PlaceholderText = "e.g. C:\\BTR\\Extensibility\\ConduentResource\\Laptop-Tunnel.conf" };
-        var btnBrowse = new Button { Text = "...", Width = 28, Height = 23, Margin = new Padding(0, 5, 0, 2), FlatStyle = FlatStyle.Flat };
+        var inputRow = new Panel { Dock = DockStyle.Top, Height = 28 };
+
+        var lblFile = new Label
+        {
+            Text = "Config File (.conf):",
+            Dock = DockStyle.Left,
+            Width = 122,
+            TextAlign = ContentAlignment.MiddleLeft
+        };
+        var btnBrowse = new Button
+        {
+            Text = "...",
+            Dock = DockStyle.Right,
+            Width = 32,
+            FlatStyle = FlatStyle.Flat
+        };
+        _tbConfFile = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Text = _ctx.ConfFilePath,
+            PlaceholderText = "e.g. C:\\BTR\\Extensibility\\ConduentResource\\Laptop-Tunnel.conf"
+        };
         btnBrowse.Click += (_, _) =>
         {
             using var dlg = new OpenFileDialog { Filter = "WireGuard Config|*.conf", Title = "Select WireGuard config file" };
             if (_ctx.ConfDirectory.Length > 0 && Directory.Exists(_ctx.ConfDirectory)) dlg.InitialDirectory = _ctx.ConfDirectory;
             if (dlg.ShowDialog() == DialogResult.OK) _tbConfFile.Text = dlg.FileName;
         };
-        layout.Controls.Add(lblFile);
-        layout.Controls.Add(_tbConfFile);
-        layout.Controls.Add(btnBrowse);
 
-        return layout;
+        // DockStyle.Left/Right/Fill order: Left first, Right second, Fill last
+        inputRow.Controls.Add(lblFile);
+        inputRow.Controls.Add(btnBrowse);
+        inputRow.Controls.Add(_tbConfFile);
+
+        // DockStyle.Top order: first added = topmost
+        outer.Controls.Add(note);
+        outer.Controls.Add(inputRow);
+
+        return outer;
     }
 
     private Control BuildResourceContent()
@@ -246,6 +269,10 @@ public class SetupPreflightForm : Form
         else if (_mode == SetupMode.Travel)
         {
             _ctx.ConfFilePath = _tbConfFile!.Text.Trim();
+            // Persist so subsequent setup runs pre-populate the path
+            var settings = AppSettings.Load();
+            settings.ConfFilePath = _ctx.ConfFilePath;
+            settings.Save();
         }
     }
 

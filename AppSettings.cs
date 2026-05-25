@@ -11,6 +11,7 @@ public class AppSettings
     public int PacPort { get; set; } = 8080;
     public string PacDirectory { get; set; } = @"C:\BTR\Extensibility\ConduentResource";
     public string TunnelName { get; set; } = "Hub-Tunnel";
+    public string ConfFilePath { get; set; } = "";  // Travel: last-used WireGuard .conf path
     public int CheckIntervalSeconds { get; set; } = 30;
     public int NotifyTimeoutMs { get; set; } = 5000;
 

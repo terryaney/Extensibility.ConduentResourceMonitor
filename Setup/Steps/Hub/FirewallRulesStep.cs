@@ -6,7 +6,7 @@ public class FirewallRulesStep : ISetupStep
     public string Description => "Adds Windows Firewall inbound rules for ports 8888 (pproxy) and 13389 (RDP to Resource).\r\nRequires administrator access.";
     public bool RequiresElevation => true;
     public bool IsManual => false;
-    public bool CanSkip => true;
+    public bool CanSkip => false;
 
     public async Task<bool> IsAlreadyCompleteAsync()
     {

@@ -14,7 +14,7 @@ public class DevSettingsStep : ISetupStep
         """;
     public bool RequiresElevation => false;
     public bool IsManual => false;
-    public bool CanSkip => true;
+    public bool CanSkip => false;
 
     public Task<bool> IsAlreadyCompleteAsync() =>
         Task.FromResult(File.Exists(SettingsPath));

@@ -14,7 +14,7 @@ public class TerminalProfileStep : ISetupStep
         """;
     public bool RequiresElevation => false;
     public bool IsManual => false;
-    public bool CanSkip => true;
+    public bool CanSkip => false;
 
     public async Task<bool> IsApplicableAsync()
     {

@@ -10,7 +10,7 @@ public class HostsFileStep : ISetupStep
     public string Description => $"Adds the entry\r\n\r\n  {_ip}  {_hostname}\r\n\r\nto {HostsFile}.\r\nRequires administrator access.";
     public bool RequiresElevation => true;
     public bool IsManual => false;
-    public bool CanSkip => true;
+    public bool CanSkip => false;
 
     public HostsFileStep(string ip, string hostname)
     {

@@ -1,12 +1,12 @@
 namespace ConduentResourceMonitor.Setup.Steps.Shared;
 
-public class InstallWireGuardStep : ISetupStep
+public class InstallWireGuardStep(bool canSkip = true) : ISetupStep
 {
     public string Title => "Install WireGuard";
     public string Description => "Installs WireGuard using winget. WireGuard's own installer will prompt for administrator access.";
     public bool RequiresElevation => false;
     public bool IsManual => false;
-    public bool CanSkip => true;
+    public bool CanSkip => canSkip;
 
     public async Task<bool> IsAlreadyCompleteAsync()
     {

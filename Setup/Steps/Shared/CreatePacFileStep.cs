@@ -9,7 +9,7 @@ public class CreatePacFileStep : ISetupStep
     public string Description => $"Creates the conduent-resource.pac proxy auto-config file in:\r\n{_confDirectory}";
     public bool RequiresElevation => false;
     public bool IsManual => false;
-    public bool CanSkip => true;
+    public bool CanSkip => false;
 
     public CreatePacFileStep(string confDirectory)
     {

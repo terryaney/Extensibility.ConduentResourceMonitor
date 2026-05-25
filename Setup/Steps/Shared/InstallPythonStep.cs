@@ -6,7 +6,7 @@ public class InstallPythonStep : ISetupStep
     public string Description => "Installs Python 3.12 via winget. Required for the PAC file HTTP server.";
     public bool RequiresElevation => false;
     public bool IsManual => false;
-    public bool CanSkip => true;
+    public bool CanSkip => false;
 
     public async Task<bool> IsAlreadyCompleteAsync()
     {

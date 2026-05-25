@@ -77,19 +77,76 @@ internal static class Program
 
     static void RunSetup(SetupMode mode, Options options)
     {
+        var settings = AppSettings.Load();
         var ctx = new SetupContext
         {
-            ConfDirectory = options.ConfDirectory ?? @"C:\BTR\Extensibility\ConduentResource",
-            ConfFilePath = options.ConfFile ?? ""
+            ConfDirectory = options.ConfDirectory ?? settings.PacDirectory,
+            ConfFilePath = options.ConfFile ?? (mode == SetupMode.Travel ? settings.ConfFilePath : "")
         };
 
-        if (mode != SetupMode.Resource)
+        // Show checklist overview first (before config) to show what will be done
+        using (var checklist = new SetupChecklistForm(mode))
+        {
+            if (checklist.ShowDialog() != DialogResult.OK) return;
+        }
+
+        if (mode == SetupMode.Travel)
+        {
+            // Auto-detect conf file: scan for installed WireGuardTunnel$* service, derive name from it
+            if (string.IsNullOrEmpty(ctx.ConfFilePath) && Directory.Exists(ctx.ConfDirectory))
+            {
+                var wgService = System.ServiceProcess.ServiceController.GetServices()
+                    .FirstOrDefault(s => s.ServiceName.StartsWith("WireGuardTunnel$", StringComparison.OrdinalIgnoreCase));
+                if (wgService != null)
+                {
+                    var tunnelName = wgService.ServiceName["WireGuardTunnel$".Length..];
+                    var byService = Path.Combine(ctx.ConfDirectory, tunnelName + ".conf");
+                    if (File.Exists(byService)) ctx.ConfFilePath = byService;
+                }
+                if (string.IsNullOrEmpty(ctx.ConfFilePath))
+                {
+                    var found = Directory.GetFiles(ctx.ConfDirectory, "*.conf");
+                    if (found.Length == 1) ctx.ConfFilePath = found[0];
+                }
+            }
+
+            // Skip preflight if the steps that need the conf file are already complete
+            if (TravelNeedsPreflight(ctx))
+            {
+                using var preflight = new SetupPreflightForm(mode, ctx);
+                if (preflight.ShowDialog() != DialogResult.OK) return;
+            }
+        }
+        else if (mode != SetupMode.Resource)
         {
             using var preflight = new SetupPreflightForm(mode, ctx);
             if (preflight.ShowDialog() != DialogResult.OK) return;
         }
 
         Application.Run(new SetupWizardForm(mode, ctx));
+    }
+
+    // Returns true if the preflight form needs to be shown to collect the conf file path.
+    // False when both conf-dependent steps (VerifyConfFile + InstallTravelTunnel) are already done.
+    static bool TravelNeedsPreflight(SetupContext ctx)
+    {
+        if (string.IsNullOrEmpty(ctx.ConfFilePath)) return true;
+
+        var confInPlace = File.Exists(Path.Combine(ctx.ConfDirectory, Path.GetFileName(ctx.ConfFilePath)));
+        if (!confInPlace) return true;
+
+        var tunnelName = Path.GetFileNameWithoutExtension(ctx.ConfFilePath);
+        try
+        {
+            using var sc = new System.ServiceProcess.ServiceController($"WireGuardTunnel${tunnelName}");
+            _ = sc.Status;
+        }
+        catch
+        {
+            return true;
+        }
+
+        return false;
     }
 
     static void RunMonitor(Options options)

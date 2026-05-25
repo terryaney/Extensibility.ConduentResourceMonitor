@@ -21,7 +21,7 @@ public class WindowsProxyStep : ISetupStep
         """;
     public bool RequiresElevation => false;
     public bool IsManual => false;
-    public bool CanSkip => true;
+    public bool CanSkip => false;
 
     public WindowsProxyStep(SetupContext ctx) => _ctx = ctx;
 
