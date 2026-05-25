@@ -1,10 +1,26 @@
 using System.Runtime.InteropServices;
+using System.Reflection;
 using CommandLine;
 using ConduentResourceMonitor;
 using ConduentResourceMonitor.Setup;
 
 internal static class Program
 {
+	private const int AttachParentProcess = -1;
+	private const int HelpColumnWidth = 34;
+
+	private static readonly IReadOnlyDictionary<string, OptionHelpMetadata> OptionHelpByProperty =
+		typeof( Options )
+			.GetProperties( BindingFlags.Public | BindingFlags.Instance )
+			.Select( property => new { Property = property, Option = property.GetCustomAttribute<OptionAttribute>() } )
+			.Where( x => x.Option is not null )
+			.ToDictionary(
+				x => x.Property.Name,
+				x => BuildOptionMetadata( x.Property, x.Option! ),
+				StringComparer.Ordinal );
+
+	private sealed record OptionHelpMetadata( string Flag, string Description, bool Required );
+
 	[DllImport( "kernel32.dll" )]
 	private static extern bool AttachConsole( int dwProcessId );
 
@@ -14,6 +30,12 @@ internal static class Program
 		Application.SetHighDpiMode( HighDpiMode.SystemAware );
 		Application.EnableVisualStyles();
 		Application.SetCompatibleTextRenderingDefault( false );
+
+		if ( IsHelpRequested( args ) )
+		{
+			ShowHelp( args );
+			return;
+		}
 
 		var setupIdx = Array.FindIndex( args, a => a.Equals( "--setup", StringComparison.OrdinalIgnoreCase ) );
 		if ( setupIdx >= 0 )
@@ -30,21 +52,6 @@ internal static class Program
 			}
 		}
 
-		if ( args.Any( a => a is "-?" or "/?" or "--help" or "-h" ) )
-		{
-			AttachConsole( -1 );
-			using var stdout = new StreamWriter( Console.OpenStandardOutput(), leaveOpen: true ) { AutoFlush = true };
-			Console.SetOut( stdout );
-
-			AppMode? mode = null;
-			var modeIdx = Array.FindIndex( args, a => a.Equals( "--mode", StringComparison.OrdinalIgnoreCase ) );
-			if ( modeIdx >= 0 && modeIdx + 1 < args.Length &&
-				Enum.TryParse<AppMode>( args[ modeIdx + 1 ], ignoreCase: true, out var m ) )
-				mode = m;
-			WriteHelp( mode );
-			return;
-		}
-
 		Parser.Default.ParseArguments<Options>( args )
 			.WithParsed( Run )
 			.WithNotParsed( errors =>
@@ -56,6 +63,32 @@ internal static class Program
 					ShowError( $"Invalid arguments:\n{string.Join( "\n", fatal )}\n\nUsage: ConduentResourceMonitor.exe [--mode Hub|Travel] [options]" );
 				Environment.Exit( 1 );
 			} );
+	}
+
+	static bool IsHelpRequested( IEnumerable<string> args ) =>
+		args.Any( a => a is "-?" or "/?" or "--help" or "-h" );
+
+	static AppMode? ParseRequestedMode( string[] args )
+	{
+		var modeIdx = Array.FindIndex( args, a => a.Equals( "--mode", StringComparison.OrdinalIgnoreCase ) );
+		if ( modeIdx >= 0 && modeIdx + 1 < args.Length &&
+			Enum.TryParse<AppMode>( args[ modeIdx + 1 ], ignoreCase: true, out var mode ) )
+			return mode;
+
+		return null;
+	}
+
+	static void ShowHelp( string[] args )
+	{
+		if ( AttachConsole( AttachParentProcess ) )
+		{
+			using var stdout = new StreamWriter( Console.OpenStandardOutput(), leaveOpen: true ) { AutoFlush = true };
+			Console.SetOut( stdout );
+			WriteHelp( ParseRequestedMode( args ) );
+			return;
+		}
+
+		ShowInfo( "Help is only supported in CLI mode. Run this command from a console to view -? output." );
 	}
 
 	static void Run( Options options )
@@ -178,13 +211,30 @@ internal static class Program
 
 	static void WriteHelp( AppMode? mode )
 	{
-		const int col = 34; // 2-space indent + 32 chars for flag/padding
+		var defaults = new AppSettings();
+		var defaultCheckUrl = $"Default: {defaults.CheckUrl}";
+		var defaultPacDirectory = $"Default: {defaults.PacDirectory}";
+		var defaultPacPort = $"Default: {defaults.PacPort}";
+		var defaultCheckInterval = $"Default: {defaults.CheckIntervalSeconds}";
+		var defaultNotifyTimeout = $"Default: {defaults.NotifyTimeoutMs}";
+		var defaultHubTunnelName = $"Default: {defaults.TunnelName}";
+		var defaultTunnelName = $"Default: {defaults.TunnelName} (Hub) or Travel-Tunnel (Travel)";
+		var defaultConfDirectory = $"Default: {defaults.PacDirectory}";
 
 		static void Opt( string flag, string desc, string? note = null )
 		{
-			Console.WriteLine( ( "  " + flag ).PadRight( col ) + desc );
+			Console.WriteLine( ( "  " + flag ).PadRight( HelpColumnWidth ) + desc );
 			if ( note != null )
-				Console.WriteLine( "".PadRight( col ) + note );
+				Console.WriteLine( "".PadRight( HelpColumnWidth ) + note );
+		}
+
+		static void OptFromOption( string propertyName, string? note = null )
+		{
+			if ( !OptionHelpByProperty.TryGetValue( propertyName, out var option ) )
+				throw new InvalidOperationException( $"Missing [Option] metadata for '{propertyName}'." );
+
+			var desc = option.Required ? $"{option.Description} (required)" : option.Description;
+			Opt( option.Flag, desc, note );
 		}
 
 		Console.WriteLine();
@@ -202,17 +252,14 @@ internal static class Program
 			Console.WriteLine( "  WireGuard     Hub-Tunnel service running" );
 			Console.WriteLine();
 			Console.WriteLine( "Options:" );
-			Opt( "--repair-on-start", "Run port proxy repair on launch (60 s delay).",
-				"Use in startup shortcut to handle Windows boot timing." );
-			Opt( "--check-url <url>", "URL for VPN/pproxy health check.",
-				"Default: https://hrspwebtools001.americas.oneacs.com/msl" );
-			Opt( "--tunnel-name <name>", "WireGuard tunnel service name. Default: Hub-Tunnel" );
-			Opt( "--pac-dir <path>", "Directory containing conduent-resource.pac.",
-				@"Default: C:\BTR\Extensibility\ConduentResource" );
-			Opt( "--pac-port <n>", "PAC HTTP server port. Default: 8080" );
-			Opt( "--check-interval <n>", "Seconds between health checks. Default: 30" );
-			Opt( "--notify-timeout <n>", "Notification display time in ms. Default: 5000" );
-			Opt( "--show-log", "Open log window on startup." );
+			OptFromOption( nameof( Options.RepairOnStart ), "Use in startup shortcut to handle Windows boot timing." );
+			OptFromOption( nameof( Options.CheckUrl ), defaultCheckUrl );
+			OptFromOption( nameof( Options.TunnelName ), defaultHubTunnelName );
+			OptFromOption( nameof( Options.PacDirectory ), defaultPacDirectory );
+			OptFromOption( nameof( Options.PacPort ), defaultPacPort );
+			OptFromOption( nameof( Options.CheckIntervalSeconds ), defaultCheckInterval );
+			OptFromOption( nameof( Options.NotifyTimeoutMs ), defaultNotifyTimeout );
+			OptFromOption( nameof( Options.ShowLog ) );
 			Console.WriteLine();
 			Console.WriteLine( "Tip: Run -? without --mode for full help including setup options." );
 		}
@@ -228,15 +275,13 @@ internal static class Program
 			Console.WriteLine( "  WireGuard     Travel tunnel service running" );
 			Console.WriteLine();
 			Console.WriteLine( "Options:" );
-			Opt( "--check-url <url>", "URL for VPN/pproxy health check.",
-				"Default: https://hrspwebtools001.americas.oneacs.com/msl" );
-			Opt( "--tunnel-name <name>", "WireGuard tunnel service name. Default: Travel-Tunnel" );
-			Opt( "--pac-dir <path>", "Directory containing conduent-resource.pac.",
-				@"Default: C:\BTR\Extensibility\ConduentResource" );
-			Opt( "--pac-port <n>", "PAC HTTP server port. Default: 8080" );
-			Opt( "--check-interval <n>", "Seconds between health checks. Default: 30" );
-			Opt( "--notify-timeout <n>", "Notification display time in ms. Default: 5000" );
-			Opt( "--show-log", "Open log window on startup." );
+			OptFromOption( nameof( Options.CheckUrl ), defaultCheckUrl );
+			OptFromOption( nameof( Options.TunnelName ), "Default: Travel-Tunnel" );
+			OptFromOption( nameof( Options.PacDirectory ), defaultPacDirectory );
+			OptFromOption( nameof( Options.PacPort ), defaultPacPort );
+			OptFromOption( nameof( Options.CheckIntervalSeconds ), defaultCheckInterval );
+			OptFromOption( nameof( Options.NotifyTimeoutMs ), defaultNotifyTimeout );
+			OptFromOption( nameof( Options.ShowLog ) );
 			Console.WriteLine();
 			Console.WriteLine( "Tip: Run -? without --mode for full help including setup options." );
 		}
@@ -249,28 +294,23 @@ internal static class Program
 			Console.WriteLine( "  ConduentResourceMonitor.exe -? [--mode Hub|Travel]" );
 			Console.WriteLine();
 			Console.WriteLine( "Monitor Options:" );
-			Opt( "--mode <Hub|Travel>", "Select mode. Inferred from settings file if exactly one exists." );
-			Opt( "--check-url <url>", "URL for VPN/pproxy health check.",
-				"Default: https://hrspwebtools001.americas.oneacs.com/msl" );
-			Opt( "--tunnel-name <name>", "WireGuard tunnel/service name.",
-				"Default: Hub-Tunnel (Hub) or Travel-Tunnel (Travel)" );
-			Opt( "--pac-dir <path>", "Directory containing conduent-resource.pac.",
-				@"Default: C:\BTR\Extensibility\ConduentResource" );
-			Opt( "--pac-port <n>", "PAC HTTP server port. Default: 8080" );
-			Opt( "--check-interval <n>", "Seconds between health checks. Default: 30" );
-			Opt( "--notify-timeout <n>", "Notification display time in ms. Default: 5000" );
-			Opt( "--show-log", "Open log window on startup." );
+			OptFromOption( nameof( Options.Mode ) );
+			OptFromOption( nameof( Options.CheckUrl ), defaultCheckUrl );
+			OptFromOption( nameof( Options.TunnelName ), defaultTunnelName );
+			OptFromOption( nameof( Options.PacDirectory ), defaultPacDirectory );
+			OptFromOption( nameof( Options.PacPort ), defaultPacPort );
+			OptFromOption( nameof( Options.CheckIntervalSeconds ), defaultCheckInterval );
+			OptFromOption( nameof( Options.NotifyTimeoutMs ), defaultNotifyTimeout );
+			OptFromOption( nameof( Options.ShowLog ) );
 			Console.WriteLine();
 			Console.WriteLine( "Hub-Only Monitor Options:" );
-			Opt( "--repair-on-start", "Run port proxy repair on launch (60 s delay).",
-				"Use in startup shortcut to handle Windows boot timing." );
+			OptFromOption( nameof( Options.RepairOnStart ), "Use in startup shortcut to handle Windows boot timing." );
 			Console.WriteLine();
 			Console.WriteLine( "Setup Options:" );
-			Opt( "--setup <Hub|Travel|Resource>", "Run guided setup wizard." );
-			Opt( "--add-travel-config", "Add a new Travel machine to an existing Hub config." );
-			Opt( "--conf-dir <path>", "Directory for WireGuard .conf files.",
-				@"Default: C:\BTR\Extensibility\ConduentResource" );
-			Opt( "--conf-file <path>", "Travel setup: path to the .conf file generated on Hub." );
+			OptFromOption( nameof( Options.Setup ) );
+			OptFromOption( nameof( Options.AddTravelConfig ) );
+			OptFromOption( nameof( Options.ConfDirectory ), defaultConfDirectory );
+			OptFromOption( nameof( Options.ConfFile ) );
 			Console.WriteLine();
 			Console.WriteLine( "Tip: Run -? --mode Hub or -? --mode Travel for mode-specific help." );
 		}
@@ -279,4 +319,23 @@ internal static class Program
 	}
 
 	static void ShowError( string message ) => MessageBox.Show( message, "Conduent Resource Monitor", MessageBoxButtons.OK, MessageBoxIcon.Error );
+
+	static void ShowInfo( string message ) => MessageBox.Show( message, "Conduent Resource Monitor", MessageBoxButtons.OK, MessageBoxIcon.Information );
+
+	private static OptionHelpMetadata BuildOptionMetadata( PropertyInfo property, OptionAttribute option )
+	{
+		var type = Nullable.GetUnderlyingType( property.PropertyType ) ?? property.PropertyType;
+		var valueHint = type == typeof( bool ) ? string.Empty : $" <{GetValueHint( type )}>";
+		return new OptionHelpMetadata( $"--{option.LongName}{valueHint}", option.HelpText ?? string.Empty, option.Required );
+	}
+
+	private static string GetValueHint( Type optionType )
+	{
+		if ( optionType.IsEnum )
+			return string.Join( "|", Enum.GetNames( optionType ) );
+
+		if ( optionType == typeof( int ) ) return "n";
+ 
+		return "value";
+	}
 }
