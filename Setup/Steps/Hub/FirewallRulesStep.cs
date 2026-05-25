@@ -18,12 +18,22 @@ public class FirewallRulesStep : ISetupStep
     public async Task<SetupStepResult> RunAsync(IProgress<string> progress)
     {
         progress.Report("Adding firewall rules for ports 8888 and 13389 (requires UAC)...");
-        var script = """
-            netsh advfirewall firewall add rule name="WireGuard Port 8888" protocol=TCP dir=in localport=8888 action=allow
-            netsh advfirewall firewall add rule name="WireGuard Port 13389" protocol=TCP dir=in localport=13389 action=allow
-            echo Firewall rules added.
-            """;
-        await ProcessHelper.RunElevatedBatAsync(script);
+        var commands = new List<ElevatedCommand>
+        {
+            new()
+            {
+                FileName = "netsh",
+                Arguments = ["advfirewall", "firewall", "add", "rule", "name=WireGuard Port 8888", "protocol=TCP", "dir=in", "localport=8888", "action=allow"],
+                Description = "Adding firewall rule WireGuard Port 8888"
+            },
+            new()
+            {
+                FileName = "netsh",
+                Arguments = ["advfirewall", "firewall", "add", "rule", "name=WireGuard Port 13389", "protocol=TCP", "dir=in", "localport=13389", "action=allow"],
+                Description = "Adding firewall rule WireGuard Port 13389"
+            }
+        };
+        await ProcessHelper.RunElevatedCommandsAsync(commands);
         var ok = await IsAlreadyCompleteAsync();
         return new SetupStepResult(ok, ok ? "Firewall rules configured." : "Could not verify firewall rules. Check output window.");
     }

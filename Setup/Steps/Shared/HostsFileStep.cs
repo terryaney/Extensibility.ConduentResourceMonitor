@@ -35,13 +35,31 @@ public class HostsFileStep : ISetupStep
 
     public async Task<SetupStepResult> RunAsync(IProgress<string> progress)
     {
+        if ( !System.Net.IPAddress.TryParse( _ip, out _ ) )
+            return new SetupStepResult( false, $"Invalid IP address: {_ip}" );
+
+        if ( !ProcessHelper.IsSafeHostAliasToken( _hostname ) )
+            return new SetupStepResult( false, $"Invalid hostname: {_hostname}" );
+
         progress.Report($"Writing '{_ip}  {_hostname}' to hosts file (requires UAC)...");
-        // Remove any existing uncommented entry for the hostname, then append the correct one.
-        // Handles first run, IP changes, and re-runs uniformly.
-        var script = $$"""
-            powershell -NoProfile -Command "$h='{{HostsFile}}'; $lines=[IO.File]::ReadAllLines($h); $filtered=@($lines | Where-Object { -not ($_ -notmatch '^\s*#' -and $_ -imatch [regex]::Escape('{{_hostname}}')) }); $filtered+='{{_ip}}  {{_hostname}}'; [IO.File]::WriteAllLines($h,$filtered,[System.Text.Encoding]::ASCII)"
-            """;
-        await ProcessHelper.RunElevatedBatAsync(script);
+        var commands = new List<ElevatedCommand>
+        {
+            new()
+            {
+                FileName = "powershell.exe",
+                Arguments =
+                [
+                    "-NoProfile",
+                    "-Command",
+                    "$h=$args[0];$ip=$args[1];$name=$args[2];$lines=[IO.File]::ReadAllLines($h);$filtered=@($lines | Where-Object { -not ($_ -notmatch '^\\s*#' -and $_ -imatch [regex]::Escape($name)) });$filtered+=($ip + '  ' + $name);[IO.File]::WriteAllLines($h,$filtered,[System.Text.Encoding]::ASCII)",
+                    HostsFile,
+                    _ip,
+                    _hostname
+                ],
+                Description = "Updating hosts file entry"
+            }
+        };
+        await ProcessHelper.RunElevatedCommandsAsync(commands);
         var ok = await IsAlreadyCompleteAsync();
         return new SetupStepResult(ok, ok ? "Hosts file updated." : "Could not verify hosts file entry. Check manually.");
     }

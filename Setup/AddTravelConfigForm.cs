@@ -136,13 +136,29 @@ public class AddTravelConfigForm : Form
 
 			// Reinstall Hub tunnel service
 			AppendOutput( "Reinstalling Hub tunnel service (requires UAC)...\r\n" );
-			var script = $"""
-                "C:\Program Files\WireGuard\wireguard.exe" /uninstalltunnelservice Hub-Tunnel
-                timeout /t 3 /nobreak
-                "C:\Program Files\WireGuard\wireguard.exe" /installtunnelservice "{hubConf}"
-                echo Hub tunnel service reinstalled.
-                """;
-			await ProcessHelper.RunElevatedBatAsync( script );
+			var commands = new List<ElevatedCommand>
+			{
+				new()
+				{
+					FileName = ProcessHelper.WireGuardExePath,
+					Arguments = ["/uninstalltunnelservice", "Hub-Tunnel"],
+					SuccessExitCodes = [0, 1],
+					Description = "Uninstalling existing Hub-Tunnel service"
+				},
+				new()
+				{
+					FileName = "powershell.exe",
+					Arguments = ["-NoProfile", "-Command", "Start-Sleep -Seconds 3"],
+					Description = "Waiting before reinstalling Hub-Tunnel"
+				},
+				new()
+				{
+					FileName = ProcessHelper.WireGuardExePath,
+					Arguments = ["/installtunnelservice", hubConf],
+					Description = "Installing updated Hub-Tunnel service"
+				}
+			};
+			await ProcessHelper.RunElevatedCommandsAsync( commands );
 
 			AppendOutput( $"\r\n✓ Done! Copy {travelConfPath} to {name} and run Travel setup.\r\n", Color.FromArgb( 0, 128, 64 ) );
 			AppendOutput( $"\r\nTravel setup command:\r\nConduentResourceMonitor.exe --setup Travel --conf-file \"{travelConfPath}\"\r\n" );

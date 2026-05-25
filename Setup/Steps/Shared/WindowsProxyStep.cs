@@ -5,7 +5,7 @@ namespace ConduentResourceMonitor.Setup.Steps.Shared;
 public class WindowsProxyStep : ISetupStep
 {
     private readonly SetupContext _ctx;
-    private string PacUrl => $"http://localhost:{8080}/conduent-resource.pac";
+    private string PacUrl => $"http://localhost:{_ctx.PacPort}/conduent-resource.pac";
 
     public string Title => "Configure Windows Proxy Settings";
     public string Description =>

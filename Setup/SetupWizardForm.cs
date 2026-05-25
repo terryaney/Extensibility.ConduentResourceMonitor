@@ -39,7 +39,7 @@ public class SetupWizardForm : Form
 
 		BuildLayout();
 		SelectStep( 0 );
-		
+
 		_ = CheckInitialStatusesAsync();
 	}
 
@@ -201,17 +201,8 @@ public class SetupWizardForm : Form
 		_btnSkip.FlatAppearance.BorderColor = Color.FromArgb( 180, 180, 180 );
 		_btnSkip.Click += ( _, _ ) => OnSkipStep();
 
-		actionPanel.Controls.AddRange( 
-			_btnRun, 
-			_btnMarkDone, 
-			_btnSkip,
-			_outputBox,
-			actionPanel,
-			separator,
-			_lblDesc,
-			_lblBadges,
-			_lblTitle
-		);
+		actionPanel.Controls.AddRange( _btnRun, _btnMarkDone, _btnSkip );
+		panel.Controls.AddRange( _outputBox, actionPanel, separator, _lblDesc, _lblBadges, _lblTitle );
 
 		return panel;
 	}

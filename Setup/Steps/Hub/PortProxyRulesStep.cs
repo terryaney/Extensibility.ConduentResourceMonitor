@@ -29,14 +29,32 @@ public class PortProxyRulesStep(SetupContext ctx) : ISetupStep
     public async Task<SetupStepResult> RunAsync(IProgress<string> progress)
     {
         var host = ConnectHost;
+        if ( !ProcessHelper.IsSafeV4HostToken( host ) )
+            return new SetupStepResult( false, $"Invalid Resource host/IP: {host}" );
+
         progress.Report($"Setting up port proxy rules to {host} (requires UAC)...");
-        var script = $"""
-            netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=8888 connectaddress={host} connectport=8888
-            netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=13389 connectaddress={host} connectport=3389
-            echo Verifying:
-            netsh interface portproxy show all
-            """;
-        await ProcessHelper.RunElevatedBatAsync(script);
+        var commands = new List<ElevatedCommand>
+        {
+            new()
+            {
+                FileName = "netsh",
+                Arguments = ["interface", "portproxy", "add", "v4tov4", "listenaddress=0.0.0.0", "listenport=8888", $"connectaddress={host}", "connectport=8888"],
+                Description = "Adding port proxy rule for 8888"
+            },
+            new()
+            {
+                FileName = "netsh",
+                Arguments = ["interface", "portproxy", "add", "v4tov4", "listenaddress=0.0.0.0", "listenport=13389", $"connectaddress={host}", "connectport=3389"],
+                Description = "Adding port proxy rule for 13389"
+            },
+            new()
+            {
+                FileName = "netsh",
+                Arguments = ["interface", "portproxy", "show", "all"],
+                Description = "Verifying port proxy rules"
+            }
+        };
+        await ProcessHelper.RunElevatedCommandsAsync(commands);
         var ok = await IsAlreadyCompleteAsync();
         return new SetupStepResult(ok, ok ? "Port proxy rules configured." : "Could not verify port proxy rules. Run 'netsh interface portproxy show all' to check.");
     }

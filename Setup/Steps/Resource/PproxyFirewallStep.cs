@@ -17,11 +17,16 @@ public class PproxyFirewallStep : ISetupStep
     public async Task<SetupStepResult> RunAsync(IProgress<string> progress)
     {
         progress.Report("Creating pproxy firewall rule (requires UAC)...");
-        var script = """
-            powershell -Command "New-NetFirewallRule -DisplayName 'pproxy' -Direction Inbound -LocalPort 8888 -Protocol TCP -Action Allow"
-            echo Firewall rule created.
-            """;
-        await ProcessHelper.RunElevatedBatAsync(script);
+        var commands = new List<ElevatedCommand>
+        {
+            new()
+            {
+                FileName = "netsh",
+                Arguments = ["advfirewall", "firewall", "add", "rule", "name=pproxy", "protocol=TCP", "dir=in", "localport=8888", "action=allow"],
+                Description = "Creating firewall rule for pproxy"
+            }
+        };
+        await ProcessHelper.RunElevatedCommandsAsync(commands);
         var ok = await IsAlreadyCompleteAsync();
         return new SetupStepResult(ok, ok ? "pproxy firewall rule created." : "Could not verify firewall rule. Check output window.");
     }

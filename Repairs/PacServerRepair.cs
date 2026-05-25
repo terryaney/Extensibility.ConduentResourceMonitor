@@ -11,5 +11,10 @@ public class PacServerRepair( PacServerService service, ICheck check ) : IRepair
 	public string TargetCheckName => check.Name;
 	public bool RequiresElevation => false;
 
-	public void Execute() => _service.Restart();
+	public Task ExecuteAsync( Action<string>? logLine = null )
+	{
+		logLine?.Invoke( "Restarting PAC web server." );
+		_service.Restart();
+		return Task.CompletedTask;
+	}
 }

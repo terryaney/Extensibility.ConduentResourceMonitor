@@ -37,16 +37,16 @@ public class InstallHubTunnelStep : ISetupStep
             return new SetupStepResult(false, $"Config file not found: {ConfPath}\r\nRun the 'Generate Keys' step first.");
 
         progress.Report($"Installing WireGuard service for {TunnelName} (requires UAC)...");
-        var script = $"""
-            "C:\Program Files\WireGuard\wireguard.exe" /installtunnelservice "{ConfPath}"
-            if errorlevel 1 (
-                echo ERROR: Failed to install tunnel service.
-                pause
-            ) else (
-                echo Tunnel service installed successfully.
-            )
-            """;
-        await ProcessHelper.RunElevatedBatAsync(script);
+        var commands = new List<ElevatedCommand>
+        {
+            new()
+            {
+                FileName = ProcessHelper.WireGuardExePath,
+                Arguments = ["/installtunnelservice", ConfPath],
+                Description = "Installing Hub tunnel service"
+            }
+        };
+        await ProcessHelper.RunElevatedCommandsAsync(commands);
         var ok = await IsAlreadyCompleteAsync();
         return new SetupStepResult(ok, ok ? "Hub tunnel service installed." : "Service install may have failed. Check the command window output.");
     }

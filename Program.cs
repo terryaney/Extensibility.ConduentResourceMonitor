@@ -81,6 +81,7 @@ internal static class Program
 		var ctx = new SetupContext
 		{
 			ConfDirectory = options.ConfDirectory ?? settings.PacDirectory,
+			PacPort = options.PacPort ?? settings.PacPort,
 			ConfFilePath = options.ConfFile ?? ( mode == SetupMode.Travel ? settings.ConfFilePath : "" )
 		};
 

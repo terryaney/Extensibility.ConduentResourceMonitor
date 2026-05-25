@@ -5,5 +5,5 @@ public interface IRepair
 	string Label { get; }
 	string TargetCheckName { get; }
 	bool RequiresElevation { get; }
-	void Execute();
+	Task ExecuteAsync( Action<string>? logLine = null );
 }

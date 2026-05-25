@@ -15,6 +15,8 @@ public class TrayApp : ApplicationContext
 	private readonly List<IRepair> _repairs;
 	private readonly LogForm _logForm;
 	private readonly Dictionary<string, int> _repairAttempts = [];
+	private readonly HashSet<string> _repairsInFlight = [];
+	private readonly object _repairLock = new();
 	private readonly Icon _greenIcon;
 	private readonly Icon _redIcon;
 
@@ -51,7 +53,7 @@ public class TrayApp : ApplicationContext
 		if ( repairOnStart && _mode == AppMode.Hub )
 		{
 			var repair = _repairs.OfType<PortProxyRepair>().FirstOrDefault();
-			repair?.Execute( startupDelay: false );
+			if ( repair != null ) _ = RunStartupPortProxyRepairAsync( repair );
 		}
 
 		_ = _monitor.Start();
@@ -110,10 +112,10 @@ public class TrayApp : ApplicationContext
 
 			var repair = _repairs.FirstOrDefault( rp => rp.TargetCheckName == r.Name && !rp.RequiresElevation );
 			if ( repair == null ) continue;
+			if ( !QueueRepair( repair ) ) continue;
 
 			_repairAttempts[ r.Name ] = attempts + 1;
 			_logForm.AppendLine( $"[{ts}] AUTO-REPAIR ({attempts + 1}/2): {repair.Label}" );
-			repair.Execute();
 		}
 	}
 
@@ -149,7 +151,7 @@ public class TrayApp : ApplicationContext
 		{
 			var r = repair;
 			var item = new ToolStripMenuItem( $"Fix: {r.Label}" );
-			item.Click += ( _, _ ) => r.Execute();
+			item.Click += ( _, _ ) => _ = QueueRepair( r );
 			menu.Items.Add( item );
 		}
 		if ( fixItems.Count > 0 )
@@ -188,6 +190,75 @@ public class TrayApp : ApplicationContext
 		_tray.Visible = false;
 		_tray.Dispose();
 		Application.Exit();
+	}
+
+	private async Task RunStartupPortProxyRepairAsync( PortProxyRepair repair )
+	{
+		var key = repair.TargetCheckName;
+		if ( !TryStartRepair( key ) )
+		{
+			AppendRepairLog( $"Skipped startup repair '{repair.Label}' because one is already in progress." );
+			return;
+		}
+
+		try
+		{
+			await repair.ExecuteAsync( startupDelay: false, logLine: AppendRepairLog );
+		}
+		catch ( Exception ex )
+		{
+			AppendRepairLog( $"Startup repair '{repair.Label}' failed: {ex.Message}" );
+		}
+		finally
+		{
+			EndRepair( key );
+		}
+	}
+
+	private async Task RunRepairAsync( IRepair repair )
+	{
+		try
+		{
+			await repair.ExecuteAsync( AppendRepairLog );
+		}
+		catch ( Exception ex )
+		{
+			AppendRepairLog( $"{repair.Label} failed: {ex.Message}" );
+		}
+		finally
+		{
+			EndRepair( repair.TargetCheckName );
+		}
+	}
+
+	private bool QueueRepair( IRepair repair )
+	{
+		if ( !TryStartRepair( repair.TargetCheckName ) )
+		{
+			AppendRepairLog( $"Skipped '{repair.Label}' because a repair for '{repair.TargetCheckName}' is already in progress." );
+			return false;
+		}
+
+		_ = RunRepairAsync( repair );
+		return true;
+	}
+
+	private void AppendRepairLog( string line )
+	{
+		var ts = DateTime.Now.ToString( "HH:mm:ss" );
+		_logForm.AppendLine( $"[{ts}] {line}" );
+	}
+
+	private bool TryStartRepair( string targetCheckName )
+	{
+		lock ( _repairLock )
+			return _repairsInFlight.Add( targetCheckName );
+	}
+
+	private void EndRepair( string targetCheckName )
+	{
+		lock ( _repairLock )
+			_ = _repairsInFlight.Remove( targetCheckName );
 	}
 
 	protected override void Dispose( bool disposing )
