@@ -2,14 +2,13 @@ using System.Net;
 
 namespace ConduentResourceMonitor.Checks;
 
-public class ProxyCheck( string name, AppSettings settings ) : ICheck
+public class ProxyCheck( AppSettings settings ) : ICheck
 {
 	private readonly AppSettings _settings = settings;
-	private readonly string _checkName = name;
 	private HttpClient? _client;
 	private string? _lastProxyAddress;
 
-	public string Name => _checkName;
+	public string Name => "Resource VPN";
 
 	private HttpClient GetClient()
 	{

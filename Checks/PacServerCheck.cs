@@ -5,7 +5,7 @@ public class PacServerCheck( AppSettings settings ) : ICheck
 	private readonly AppSettings _settings = settings;
 	private readonly HttpClient _client = new() { Timeout = TimeSpan.FromSeconds( 5 ) };
 
-	public string Name => "PAC";
+	public string Name => "PAC Web Server";
 
 	public async Task<CheckResult> RunAsync()
 	{

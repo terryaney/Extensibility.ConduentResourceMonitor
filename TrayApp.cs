@@ -32,7 +32,7 @@ public class TrayApp : ApplicationContext
 		_pacServer.Start();
 
 		var checks = BuildChecks( _mode, settings );
-		_repairs = BuildRepairs( _mode, settings );
+		_repairs = BuildRepairs( _mode, settings, checks );
 
 		_monitor = new MonitorService( checks, settings.CheckIntervalSeconds );
 		_monitor.ResultsUpdated += OnResultsUpdated;
@@ -57,37 +57,31 @@ public class TrayApp : ApplicationContext
 		_ = _monitor.Start();
 	}
 
-	private static IReadOnlyList<ICheck> BuildChecks( AppMode mode, AppSettings settings ) => mode switch
+	private static IReadOnlyList<ICheck> BuildChecks( AppMode mode, AppSettings settings )
 	{
-		AppMode.Hub =>
+		return
 		[
-			new ProxyCheck("VPN", settings),
-			new PortForwardCheck("Port Forwarding", "localhost", 8888, 13389),
+			new ProxyCheck( settings ),
+			mode == AppMode.Hub
+				? new PortForwardCheck("Port Proxy / Forwarding", "localhost", 8888, 13389)
+				: new PortForwardCheck("Resource RDP", "conduent-resource", 13389),
 			new PacServerCheck(settings),
 			new WireGuardCheck(settings)
-		],
-		AppMode.Travel =>
-		[
-			new ProxyCheck("VPN", settings),
-			new PortForwardCheck("Resource RDP", "conduent-resource", 13389),
-			new PacServerCheck(settings),
-			new WireGuardCheck(settings)
-		],
-		_ => throw new ArgumentOutOfRangeException( nameof( mode ) )
-	};
+		];
+	}
 
-	private List<IRepair> BuildRepairs( AppMode mode, AppSettings settings )
+	private List<IRepair> BuildRepairs( AppMode mode, AppSettings settings, IReadOnlyList<ICheck> checks )
 	{
-		var repairs = new List<IRepair>();
+		var repairs = new List<IRepair> { new ResourceVpnRepair( checks.First( i => i is ProxyCheck ) ) };
+
 		if ( mode == AppMode.Hub )
 		{
-			repairs.Add( new ResourcePproxyRepair( "VPN" ) );
-			repairs.Add( new PortProxyRepair( settings ) );
+			repairs.Add( new PortProxyRepair( settings, checks.First( i => i is PortForwardCheck ) ) );
 		}
-		if ( mode == AppMode.Travel )
-			repairs.Add( new ResourcePproxyRepair( "VPN" ) );
-		repairs.Add( new WireGuardRepair( settings ) );
-		repairs.Add( new PacServerRepair( _pacServer ) );
+
+		repairs.Add( new WireGuardRepair( settings, checks.First( i => i is WireGuardCheck ) ) );
+		repairs.Add( new PacServerRepair( _pacServer, checks.First( i => i is PacServerCheck ) ) );
+
 		return repairs;
 	}
 
@@ -97,8 +91,7 @@ public class TrayApp : ApplicationContext
 		_tray.Icon = allOk ? _greenIcon : _redIcon;
 
 		var parts = results.Select( r => $"{r.Name}: {( r.Ok ? "OK" : "FAIL" )}" );
-		var hover = string.Join( " | ", parts );
-		_tray.Text = hover.Length > 63 ? hover[ ..63 ] : hover;
+		_tray.Text = string.Join( Environment.NewLine, parts );
 
 		var ts = DateTime.Now.ToString( "HH:mm:ss" );
 		foreach ( var r in results )
@@ -130,13 +123,15 @@ public class TrayApp : ApplicationContext
 			_settings.NotifyTimeoutMs,
 			$"{_mode} Monitor - {result.Name} Failed",
 			result.Detail,
-			ToolTipIcon.Warning );
+			ToolTipIcon.Warning
+		);
 	}
 
 	private ContextMenuStrip BuildContextMenu()
 	{
 		var menu = new ContextMenuStrip();
 		menu.Opening += ( _, _ ) => RebuildMenu( menu );
+
 		return menu;
 	}
 

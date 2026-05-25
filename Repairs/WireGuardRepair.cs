@@ -1,13 +1,14 @@
 using System.Diagnostics;
+using ConduentResourceMonitor.Checks;
 
 namespace ConduentResourceMonitor.Repairs;
 
-public class WireGuardRepair( AppSettings settings ) : IRepair
+public class WireGuardRepair( AppSettings settings, ICheck check ) : IRepair
 {
 	private readonly AppSettings _settings = settings;
 
 	public string Label => "Restart WireGuard";
-	public string TargetCheckName => "WireGuard";
+	public string TargetCheckName => check.Name;
 	public bool RequiresElevation => true;
 
 	public void Execute()

@@ -6,7 +6,7 @@ public class WireGuardCheck( AppSettings settings ) : ICheck
 {
 	private readonly AppSettings _settings = settings;
 
-	public string Name => "WireGuard";
+	public string Name => "WireGuard Service";
 
 	public Task<CheckResult> RunAsync()
 	{

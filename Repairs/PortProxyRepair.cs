@@ -1,13 +1,14 @@
 using System.Diagnostics;
+using ConduentResourceMonitor.Checks;
 
 namespace ConduentResourceMonitor.Repairs;
 
-public class PortProxyRepair( AppSettings settings ) : IRepair
+public class PortProxyRepair( AppSettings settings, ICheck check ) : IRepair
 {
 	private readonly AppSettings _settings = settings;
 
-	public string Label => "Repair Port Forwarding";
-	public string TargetCheckName => "Port Forwarding";
+	public string Label => "Repair Port Proxy Rules";
+	public string TargetCheckName => check.Name;
 	public bool RequiresElevation => true;
 
 	public void Execute() => Execute( startupDelay: false );
