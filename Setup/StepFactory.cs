@@ -31,6 +31,7 @@ internal static class StepFactory
             new GitProxyStep(),
             new InstallPythonStep(),
             new CreatePacFileStep(ctx.ConfDirectory),
+            new WindowsProxyStep(ctx),
             new StartupShortcutStep(SetupMode.Hub, ctx),
             new ShowTravelConfsStep(ctx),
         ]);

@@ -80,10 +80,14 @@ All keys are generated on Hub using `wg genkey` / `wg pubkey`. Keys have no mach
 |---|---|---|
 | pproxy / VPN | HTTP to internal Conduent URL via `conduent-resource:8888` | same |
 | Port Forward | TCP connect to `localhost:8888` and `localhost:13389` | TCP connect to `conduent-resource:13389` |
-| PAC Server | — | HTTP to `localhost:8080/conduent-resource.pac` |
+| PAC Server | HTTP to `localhost:8080/conduent-resource.pac` | same |
 | WireGuard | WireGuard tunnel service running | same |
 
 Both modes start and own the Python PAC server (`python -m http.server`) on launch, killing it cleanly on exit.
+
+### Auto-Repair
+
+When a check fails, the monitor automatically attempts repairs that do not require elevation, up to 2 times. Each attempt is logged. Once the check passes, the attempt counter resets. If both attempts fail, the fix action remains available in the right-click menu for manual use.
 
 ### Right-Click Actions
 
@@ -92,7 +96,7 @@ Fix actions appear only when the corresponding check is failing:
 - **Fix: Resource pproxy** — Hub only. Shows a reminder to RDP to the Resource machine, verify VPN is connected, and confirm the "Conduent-Resource - Resource Provider" terminal profile is running.
 - **Fix: Repair Port Forwarding** — Hub only. Runs an embedded repair script elevated (UAC). Stops/starts the IP Helper service and re-applies `netsh portproxy` rules.
 - **Fix: Restart WireGuard** — Restarts the WireGuard tunnel service elevated (UAC).
-- **Fix: Restart PAC Server** — Travel only. Kills and restarts the Python PAC server process.
+- **Fix: Restart PAC Server** — Kills and restarts the Python PAC server process.
 
 ### Settings
 

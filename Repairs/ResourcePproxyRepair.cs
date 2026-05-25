@@ -4,6 +4,7 @@ public class ResourcePproxyRepair : IRepair
 {
     public string Label => "Resource pproxy";
     public string TargetCheckName => "pproxy";
+    public bool RequiresElevation => true;
 
     public void Execute()
     {

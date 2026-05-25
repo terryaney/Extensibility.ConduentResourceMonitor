@@ -1,6 +1,6 @@
 using Microsoft.Win32;
 
-namespace ConduentResourceMonitor.Setup.Steps.Travel;
+namespace ConduentResourceMonitor.Setup.Steps.Shared;
 
 public class WindowsProxyStep : ISetupStep
 {

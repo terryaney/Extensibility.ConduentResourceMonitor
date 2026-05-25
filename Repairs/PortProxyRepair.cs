@@ -8,6 +8,7 @@ public class PortProxyRepair : IRepair
 
     public string Label => "Repair Port Forwarding";
     public string TargetCheckName => "PortFwd";
+    public bool RequiresElevation => true;
 
     public PortProxyRepair(AppSettings settings)
     {

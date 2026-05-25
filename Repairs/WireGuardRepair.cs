@@ -8,6 +8,7 @@ public class WireGuardRepair : IRepair
 
     public string Label => "Restart WireGuard";
     public string TargetCheckName => "WireGuard";
+    public bool RequiresElevation => true;
 
     public WireGuardRepair(AppSettings settings)
     {

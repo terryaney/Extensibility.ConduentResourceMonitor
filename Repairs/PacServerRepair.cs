@@ -8,6 +8,7 @@ public class PacServerRepair : IRepair
 
     public string Label => "Restart PAC Server";
     public string TargetCheckName => "PAC";
+    public bool RequiresElevation => false;
 
     public PacServerRepair(PacServerService service)
     {

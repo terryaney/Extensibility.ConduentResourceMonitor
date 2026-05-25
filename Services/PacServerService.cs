@@ -20,9 +20,7 @@ public class PacServerService
             {
                 WorkingDirectory = _settings.PacDirectory,
                 UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
+                CreateNoWindow = true
             });
         }
         catch { /* PacServerCheck will surface the failure */ }

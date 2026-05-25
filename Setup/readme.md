@@ -25,8 +25,9 @@ The `--setup` wizard walks through each step, checks whether it's already comple
 | 7 | Configure Git Proxy | Auto | No | `git config --global` value set; **skipped** if git not installed |
 | 8 | Install Python | Auto | No | `python --version` ≥ 3.12 |
 | 9 | Create PAC File | Auto | No | `conduent-resource.pac` exists in conf dir |
-| 10 | Create Startup Shortcut | Auto | No | Shortcut `.lnk` exists in `%APPDATA%\...\Startup` |
-| 11 | Travel Config File Locations | Manual | — | Auto-complete when all Travel `.conf` files exist |
+| 10 | Configure Windows Proxy Settings | Auto | No | `AutoConfigURL` registry value set in `HKCU\...\Internet Settings` |
+| 11 | Create Startup Shortcut | Auto | No | Shortcut `.lnk` exists in `%APPDATA%\...\Startup` |
+| 12 | Travel Config File Locations | Manual | — | Auto-complete when all Travel `.conf` files exist |
 
 Step 1 is skipped if **Skip WireGuard** is checked in the pre-flight dialog (for LAN-only setups with no remote access needed).
 
@@ -261,7 +262,7 @@ From Windows Terminal → Settings → `Open JSON file`, add to `profiles.list`:
 
 ---
 
-### PAC File Setup (Hub and Travel)
+### PAC File Setup
 
 The wizard creates this file automatically. Content of `C:\BTR\Extensibility\ConduentResource\conduent-resource.pac`:
 
@@ -287,7 +288,7 @@ Install Python (for the PAC server that the monitor runs):
 winget install Python.Python.3.12 --source winget
 ```
 
-Configure proxy: **Settings → Network & internet → Proxy → Use setup script** → `http://localhost:8080/conduent-resource.pac`
+The wizard sets Windows proxy on both Hub and Travel via the "Configure Windows Proxy Settings" step: **Settings → Network & internet → Proxy → Use setup script** → `http://localhost:8080/conduent-resource.pac`.
 
 **Note:** Chrome caches proxy settings. Visit `chrome://net-internals/#proxy` to clear if needed.
 

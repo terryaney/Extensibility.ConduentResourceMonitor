@@ -14,6 +14,7 @@ public class TrayApp : ApplicationContext
     private readonly PacServerService _pacServer;
     private readonly List<IRepair> _repairs;
     private readonly LogForm _logForm;
+    private readonly Dictionary<string, int> _repairAttempts = [];
     private readonly Icon _greenIcon;
     private readonly Icon _redIcon;
 
@@ -62,6 +63,7 @@ public class TrayApp : ApplicationContext
         [
             new ProxyCheck("pproxy", settings),
             new PortForwardCheck("localhost", 8888, 13389),
+            new PacServerCheck(settings),
             new WireGuardCheck(settings)
         ],
         AppMode.Travel =>
@@ -83,8 +85,7 @@ public class TrayApp : ApplicationContext
             repairs.Add(new PortProxyRepair(settings));
         }
         repairs.Add(new WireGuardRepair(settings));
-        if (mode == AppMode.Travel)
-            repairs.Add(new PacServerRepair(_pacServer));
+        repairs.Add(new PacServerRepair(_pacServer));
         return repairs;
     }
 
@@ -100,6 +101,25 @@ public class TrayApp : ApplicationContext
         var ts = DateTime.Now.ToString("HH:mm:ss");
         foreach (var r in results)
             _logForm.AppendLine($"[{ts}] {r.Name}: {(r.Ok ? "OK" : "FAIL")} ({r.Detail})");
+
+        foreach (var r in results)
+        {
+            if (r.Ok)
+            {
+                _repairAttempts[r.Name] = 0;
+                continue;
+            }
+
+            var attempts = _repairAttempts.GetValueOrDefault(r.Name, 0);
+            if (attempts >= 2) continue;
+
+            var repair = _repairs.FirstOrDefault(rp => rp.TargetCheckName == r.Name && !rp.RequiresElevation);
+            if (repair == null) continue;
+
+            _repairAttempts[r.Name] = attempts + 1;
+            _logForm.AppendLine($"[{ts}] AUTO-REPAIR ({attempts + 1}/2): {repair.Label}");
+            repair.Execute();
+        }
     }
 
     private void OnCheckFailed(CheckResult result)
