@@ -13,8 +13,7 @@ public class RouterConfirmStep : ISetupStep
         $"""
         Complete these steps on your router before continuing. These cannot be automated.
 
-        1. Create a static lease for Hub
-           IP: {(_ctx.HubStaticIp.Length > 0 ? _ctx.HubStaticIp : "<hub-lan-ip>")}
+        1. Create a static lease for Hub and note its LAN IP.
            (AmpliFi: Clients tab → Hub machine → Create Static Lease)
 
         2. Create a static lease for Resource

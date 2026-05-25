@@ -16,7 +16,6 @@ public class SetupChecklistForm : Form
         {
             ConfDirectory = confDir,
             ResourceStaticIp = "192.168.1.1",
-            HubStaticIp = "192.168.1.2",
             HubPublicIp = "0.0.0.0",
             SkipWireGuard = false,
             TravelMachineNames = [],

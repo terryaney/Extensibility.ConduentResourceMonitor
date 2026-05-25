@@ -9,7 +9,6 @@ public class SetupPreflightForm : Form
 
     // Hub fields
     private TextBox? _tbResourceIp;
-    private TextBox? _tbHubLanIp;
     private TextBox? _tbHubPublicIp;
     private TextBox? _tbConfDir;
     private TextBox? _tbTravelNames;
@@ -27,10 +26,9 @@ public class SetupPreflightForm : Form
         var settings = AppSettings.Load();
         if (!string.IsNullOrEmpty(settings.PacDirectory) &&
             ctx.ConfDirectory == @"C:\BTR\Extensibility\ConduentResource")
-        {
-            // Use saved PAC directory instead of default
             ctx.ConfDirectory = settings.PacDirectory;
-        }
+        if (!string.IsNullOrEmpty(settings.ResourceStaticIp) && string.IsNullOrEmpty(ctx.ResourceStaticIp))
+            ctx.ResourceStaticIp = settings.ResourceStaticIp;
 
         Text = $"Conduent Resource Setup — {mode} Configuration";
         StartPosition = FormStartPosition.CenterScreen;
@@ -74,7 +72,7 @@ public class SetupPreflightForm : Form
 
         Size = mode switch
         {
-            SetupMode.Hub => new Size(560, 480),
+            SetupMode.Hub => new Size(560, 450),
             SetupMode.Travel => new Size(520, 220),
             _ => new Size(460, 160)
         };
@@ -96,7 +94,6 @@ public class SetupPreflightForm : Form
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
         _tbResourceIp = AddRow(layout, "Resource Static IP:", _ctx.ResourceStaticIp, "e.g. 192.168.158.3");
-        _tbHubLanIp = AddRow(layout, "Hub Static LAN IP:", _ctx.HubStaticIp, "e.g. 192.168.158.2");
 
         // Hub public IP row with refresh button
         var lblPub = new Label { Text = "Hub Public IP:", AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Right, Margin = new Padding(0, 8, 8, 2) };
@@ -237,7 +234,6 @@ public class SetupPreflightForm : Form
         if (_mode == SetupMode.Hub)
         {
             if (string.IsNullOrWhiteSpace(_tbResourceIp!.Text)) errors.Add("Resource Static IP is required");
-            if (string.IsNullOrWhiteSpace(_tbHubLanIp!.Text)) errors.Add("Hub Static LAN IP is required");
             if (string.IsNullOrWhiteSpace(_tbHubPublicIp!.Text)) errors.Add("Hub Public IP is required (needed for Travel tunnel Endpoint)");
         }
         else if (_mode == SetupMode.Travel)
@@ -257,14 +253,16 @@ public class SetupPreflightForm : Form
         if (_mode == SetupMode.Hub)
         {
             _ctx.ResourceStaticIp = _tbResourceIp!.Text.Trim();
-            _ctx.HubStaticIp = _tbHubLanIp!.Text.Trim();
             _ctx.HubPublicIp = _tbHubPublicIp!.Text.Trim();
             _ctx.ConfDirectory = _tbConfDir!.Text.Trim();
             _ctx.SkipWireGuard = _cbSkipWg!.Checked;
-            _ctx.TravelMachineNames = _tbTravelNames!.Text
+            _ctx.TravelMachineNames = [.. _tbTravelNames!.Text
                 .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(n => n.Length > 0)
-                .ToList();
+                .Where(n => n.Length > 0)];
+            var settings = AppSettings.Load();
+            settings.ResourceStaticIp = _ctx.ResourceStaticIp;
+            settings.PacDirectory = _ctx.ConfDirectory;
+            settings.Save();
         }
         else if (_mode == SetupMode.Travel)
         {

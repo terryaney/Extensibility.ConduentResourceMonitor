@@ -1,9 +1,7 @@
 namespace ConduentResourceMonitor.Setup.Steps.Hub;
 
-public class PortProxyRulesStep : ISetupStep
+public class PortProxyRulesStep(SetupContext ctx) : ISetupStep
 {
-    private readonly SetupContext _ctx;
-
     public string Title => "Configure Port Proxy Rules";
     public string Description =>
         $"""
@@ -17,14 +15,15 @@ public class PortProxyRulesStep : ISetupStep
     public bool IsManual => false;
     public bool CanSkip => false;
 
-    private string ConnectHost => string.IsNullOrEmpty(_ctx.ResourceStaticIp) ? "conduent-resource" : _ctx.ResourceStaticIp;
-
-    public PortProxyRulesStep(SetupContext ctx) => _ctx = ctx;
+    private string ConnectHost => string.IsNullOrEmpty(ctx.ResourceStaticIp) ? "conduent-resource" : ctx.ResourceStaticIp;
 
     public async Task<bool> IsAlreadyCompleteAsync()
     {
         var (code, output) = await ProcessHelper.RunAsync("netsh", "interface portproxy show all");
-        return code == 0 && output.Contains("8888") && output.Contains("13389");
+        return code == 0
+            && output.Contains("8888")
+            && output.Contains("13389")
+            && output.Contains(ConnectHost, StringComparison.OrdinalIgnoreCase);
     }
 
     public async Task<SetupStepResult> RunAsync(IProgress<string> progress)

@@ -25,8 +25,7 @@ public class HostsFileStep : ISetupStep
             var lines = File.ReadAllLines(HostsFile);
             return Task.FromResult(lines.Any(l =>
                 !l.TrimStart().StartsWith('#') &&
-                l.Contains(_hostname, StringComparison.OrdinalIgnoreCase) &&
-                l.TrimStart().StartsWith(_ip)));
+                l.Contains(_hostname, StringComparison.OrdinalIgnoreCase)));
         }
         catch
         {
@@ -36,15 +35,11 @@ public class HostsFileStep : ISetupStep
 
     public async Task<SetupStepResult> RunAsync(IProgress<string> progress)
     {
-        progress.Report($"Adding '{_ip}  {_hostname}' to hosts file (requires UAC)...");
-        var script = $"""
-            findstr /C:"{_hostname}" "{HostsFile}" > nul 2>&1
-            if errorlevel 1 (
-                echo {_ip}  {_hostname} >> "{HostsFile}"
-                echo Added: {_ip}  {_hostname}
-            ) else (
-                echo Entry already exists for {_hostname}
-            )
+        progress.Report($"Writing '{_ip}  {_hostname}' to hosts file (requires UAC)...");
+        // Remove any existing uncommented entry for the hostname, then append the correct one.
+        // Handles first run, IP changes, and re-runs uniformly.
+        var script = $$"""
+            powershell -NoProfile -Command "$h='{{HostsFile}}'; $lines=[IO.File]::ReadAllLines($h); $filtered=@($lines | Where-Object { -not ($_ -notmatch '^\s*#' -and $_ -imatch [regex]::Escape('{{_hostname}}')) }); $filtered+='{{_ip}}  {{_hostname}}'; [IO.File]::WriteAllLines($h,$filtered,[System.Text.Encoding]::ASCII)"
             """;
         await ProcessHelper.RunElevatedBatAsync(script);
         var ok = await IsAlreadyCompleteAsync();

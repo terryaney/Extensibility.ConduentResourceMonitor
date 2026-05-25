@@ -50,7 +50,7 @@ public class TrayApp : ApplicationContext
         if (repairOnStart && _mode == AppMode.Hub)
         {
             var repair = _repairs.OfType<PortProxyRepair>().FirstOrDefault();
-            repair?.Execute(startupDelay: true);
+            repair?.Execute(startupDelay: false);
         }
 
         _ = _monitor.Start();

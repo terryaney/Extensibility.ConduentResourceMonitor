@@ -6,7 +6,6 @@ public class SetupContext
 
     // Hub-specific
     public string ResourceStaticIp { get; set; } = "";
-    public string HubStaticIp { get; set; } = "";
     public string HubPublicIp { get; set; } = "";
     public List<string> TravelMachineNames { get; set; } = [];
     public bool SkipWireGuard { get; set; }

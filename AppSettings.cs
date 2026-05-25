@@ -12,6 +12,7 @@ public class AppSettings
     public string PacDirectory { get; set; } = @"C:\BTR\Extensibility\ConduentResource";
     public string TunnelName { get; set; } = "Hub-Tunnel";
     public string ConfFilePath { get; set; } = "";  // Travel: last-used WireGuard .conf path
+    public string ResourceStaticIp { get; set; } = "10.0.0.1";  // Travel default; Hub overwrites with actual LAN IP
     public int CheckIntervalSeconds { get; set; } = 30;
     public int NotifyTimeoutMs { get; set; } = 5000;
 
