@@ -2,18 +2,13 @@ using ConduentResourceMonitor.Services;
 
 namespace ConduentResourceMonitor.Repairs;
 
-public class PacServerRepair : IRepair
+public class PacServerRepair( PacServerService service ) : IRepair
 {
-    private readonly PacServerService _service;
+	private readonly PacServerService _service = service;
 
-    public string Label => "Restart PAC Server";
-    public string TargetCheckName => "PAC";
-    public bool RequiresElevation => false;
+	public string Label => "Restart PAC Server";
+	public string TargetCheckName => "PAC";
+	public bool RequiresElevation => false;
 
-    public PacServerRepair(PacServerService service)
-    {
-        _service = service;
-    }
-
-    public void Execute() => _service.Restart();
+	public void Execute() => _service.Restart();
 }

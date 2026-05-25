@@ -344,7 +344,7 @@ $lnk.IconLocation = 'C:\BTR\Extensibility\PowerShell\Icons\vpn.png'
 $lnk.Save()
 ```
 
-**Note:** `netsh portproxy` rules persist across reboots but the TCP listener binding fails silently on boot — a known Windows timing issue. `--repair-on-start` fires the repair script with a 60-second delay, handling this automatically. The tray icon will show red for PortFwd during that window.
+**Note:** `netsh portproxy` rules persist across reboots but the TCP listener binding fails silently on boot — a known Windows timing issue. `--repair-on-start` fires the repair script with a 60-second delay, handling this automatically. The tray icon will show red for Port Forwarding during that window.
 
 **Travel** — launches monitor:
 ```powershell

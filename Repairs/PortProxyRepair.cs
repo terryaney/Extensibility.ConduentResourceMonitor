@@ -2,40 +2,35 @@ using System.Diagnostics;
 
 namespace ConduentResourceMonitor.Repairs;
 
-public class PortProxyRepair : IRepair
+public class PortProxyRepair( AppSettings settings ) : IRepair
 {
-    private readonly AppSettings _settings;
+	private readonly AppSettings _settings = settings;
 
-    public string Label => "Repair Port Forwarding";
-    public string TargetCheckName => "PortFwd";
-    public bool RequiresElevation => true;
+	public string Label => "Repair Port Forwarding";
+	public string TargetCheckName => "Port Forwarding";
+	public bool RequiresElevation => true;
 
-    public PortProxyRepair(AppSettings settings)
-    {
-        _settings = settings;
-    }
+	public void Execute() => Execute( startupDelay: false );
 
-    public void Execute() => Execute(startupDelay: false);
+	public void Execute( bool startupDelay )
+	{
+		var connectHost = _settings.ProxyAddress.Contains( ':' )
+			? _settings.ProxyAddress[ .._settings.ProxyAddress.LastIndexOf( ':' ) ]
+			: _settings.ProxyAddress;
 
-    public void Execute(bool startupDelay)
-    {
-        var connectHost = _settings.ProxyAddress.Contains(':')
-            ? _settings.ProxyAddress[.._settings.ProxyAddress.LastIndexOf(':')]
-            : _settings.ProxyAddress;
+		var tempBat = Path.Combine( Path.GetTempPath(), "portproxy_repair.bat" );
+		File.WriteAllText( tempBat, BuildScript( connectHost, startupDelay ) );
 
-        var tempBat = Path.Combine(Path.GetTempPath(), "portproxy_repair.bat");
-        File.WriteAllText(tempBat, BuildScript(connectHost, startupDelay));
+		Process.Start( new ProcessStartInfo( "cmd.exe", $"/c \"{tempBat}\"" )
+		{
+			Verb = "runas",
+			UseShellExecute = true
+		} );
+	}
 
-        Process.Start(new ProcessStartInfo("cmd.exe", $"/c \"{tempBat}\"")
-        {
-            Verb = "runas",
-            UseShellExecute = true
-        });
-    }
-
-    private static string BuildScript(string connectHost, bool startupDelay) => $"""
+	private static string BuildScript( string connectHost, bool startupDelay ) => $"""
         @echo off
-        {(startupDelay ? "echo [%time%] Waiting for network stack to settle...\r\ntimeout /t 60 /nobreak\r\n" : "")}
+        {( startupDelay ? "echo [%time%] Waiting for network stack to settle...\r\ntimeout /t 60 /nobreak\r\n" : "" )}
         echo [%time%] Stopping IP Helper service...
         sc stop iphlpsvc
 
