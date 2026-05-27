@@ -22,7 +22,7 @@ public class StartupShortcutStep( SetupMode mode, SetupContext ctx ) : ISetupSte
 	{
 		SetupMode.Hub => "Conduent Resource Monitor - Hub.lnk",
 		SetupMode.Travel => "Conduent Resource Monitor - Travel.lnk",
-		SetupMode.Resource => "Conduent-Resource - Resource Provider.lnk",
+		SetupMode.Resource => $"{AppSettings.ResourceProviderTerminalProfileName}.lnk",
 		_ => "Conduent.lnk"
 	};
 
@@ -42,7 +42,7 @@ public class StartupShortcutStep( SetupMode mode, SetupContext ctx ) : ISetupSte
 			if ( _mode == SetupMode.Resource )
 			{
 				lnk.TargetPath = "wt.exe";
-				lnk.Arguments = "-p \"Conduent-Resource - Resource Provider\"";
+				lnk.Arguments = $"-p \"{AppSettings.ResourceProviderTerminalProfileName}\"";
 				lnk.WorkingDirectory = @"C:\BTR\Extensibility\PowerShell";
 				lnk.IconLocation = @"C:\BTR\Extensibility\PowerShell\Icons\vpn.png";
 			}

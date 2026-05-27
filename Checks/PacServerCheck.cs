@@ -11,7 +11,7 @@ public class PacServerCheck( AppSettings settings ) : ICheck
 	{
 		try
 		{
-			var response = await _client.GetAsync( $"http://localhost:{_settings.PacPort}/conduent-resource.pac" );
+			var response = await _client.GetAsync( _settings.PacUrl );
 			return new CheckResult( Name, true, $"HTTP {(int)response.StatusCode}" );
 		}
 		catch ( Exception ex )

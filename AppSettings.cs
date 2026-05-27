@@ -5,9 +5,13 @@ namespace ConduentResourceMonitor;
 
 public class AppSettings
 {
+	public const string DefaultProxyAddress = "conduent-resource:8888";
+	public const string DefaultPacFileName = "conduent-resource.pac";
+	public const string ResourceProviderTerminalProfileName = "Conduent-Resource - Resource Provider";
+
 	public string? Mode { get; set; }  // "Hub" or "Travel" — saved so bare exe launch works
 	public string CheckUrl { get; set; } = "https://hrspwebtools001.americas.oneacs.com/msl";
-	public string ProxyAddress { get; set; } = "conduent-resource:8888";
+	public string ProxyAddress { get; set; } = DefaultProxyAddress;
 	public int PacPort { get; set; } = 8080;
 	public string PacDirectory { get; set; } = @"C:\BTR\Extensibility\ConduentResource";
 	public string TunnelName { get; set; } = "Hub-Tunnel";
@@ -19,9 +23,22 @@ public class AppSettings
 	[JsonIgnore]
 	public AppMode? AppMode => Enum.TryParse<AppMode>( Mode, ignoreCase: true, out var m ) ? m : null;
 
+	[JsonIgnore]
+	public string ProxyUrl => BuildProxyUrl( ProxyAddress );
+
+	[JsonIgnore]
+	public string PacFileName => DefaultPacFileName;
+
+	[JsonIgnore]
+	public string PacUrl => BuildPacUrl( PacPort );
+
 	private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
 	private static string SettingsPath => Path.Combine( AppContext.BaseDirectory, "ResourceMonitor.settings.json" );
+
+	public static string BuildProxyUrl( string proxyAddress ) => $"http://{proxyAddress}";
+
+	public static string BuildPacUrl( int pacPort ) => $"http://localhost:{pacPort}/{DefaultPacFileName}";
 
 	public static AppSettings Load()
 	{

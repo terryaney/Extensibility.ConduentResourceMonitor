@@ -12,7 +12,7 @@ public class ResourceVpnRepair( ICheck check ) : IRepair
 	{
 		logLine?.Invoke( "Resource VPN repair is manual and requires user action." );
 		MessageBox.Show(
-			"Remote to the Resource machine and ensure VPN is enabled and that the 'Conduent-Resource - Resource Provider' terminal profile is running.",
+			$"Remote to the Resource machine and ensure VPN is enabled and that the '{AppSettings.ResourceProviderTerminalProfileName}' terminal profile is running.",
 			"Fix: Check Resource VPN",
 			MessageBoxButtons.OK,
 			MessageBoxIcon.Information 

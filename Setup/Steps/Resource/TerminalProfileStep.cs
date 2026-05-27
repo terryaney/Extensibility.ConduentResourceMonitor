@@ -7,7 +7,7 @@ public class TerminalProfileStep : ISetupStep
 	public string Title => "Add Windows Terminal Profile";
 	public string Description =>
 		"""
-        Adds the 'Conduent-Resource - Resource Provider' profile to Windows Terminal.
+        Adds the resource provider profile to Windows Terminal.
         This profile runs pproxy automatically with a visible warning not to close the tab.
 
         Hard block: Windows Terminal must be installed. Install from the Microsoft Store if needed.
@@ -44,33 +44,36 @@ public class TerminalProfileStep : ISetupStep
 			return new SetupStepResult( false, "Windows Terminal settings.json not found. Install Windows Terminal from the Microsoft Store first." );
 
 		progress.Report( $"Editing: {settingsPath}" );
+		var profileName = AppSettings.ResourceProviderTerminalProfileName.Replace( "'", "''" );
+		var escapedSettingsPath = settingsPath.Replace( "'", "''" );
 
-		var script = $$"""
-            $settingsPath = '{{settingsPath.Replace( "'", "''" )}}'
-            $guid = '{{ProfileGuid}}'
-            $content = Get-Content $settingsPath -Raw
-            if ($content -match [regex]::Escape($guid)) {
-                Write-Output "Profile already exists — no change made."
-                exit 0
-            }
-            $settings = $content | ConvertFrom-Json
-            $profile = [pscustomobject]@{
-                guid = $guid
-                name = "Conduent-Resource - Resource Provider"
-                commandline = 'pwsh.exe -NoExit -Command "Write-Host ''DO NOT CLOSE this Terminal tab, it is needed for VPN support.'' -ForegroundColor Yellow; pproxy -l http://:8888"'
-                background = "#08082E"
-                backgroundImage = "C:\BTR\Extensibility\PowerShell\Icons\vpn.png"
-                backgroundImageAlignment = "bottomRight"
-                backgroundImageOpacity = 0.1
-                backgroundImageStretchMode = "none"
-                hidden = $false
-                icon = "C:\BTR\Extensibility\PowerShell\Icons\vpn.png"
-                startingDirectory = "C:\BTR\Extensibility\PowerShell"
-            }
-            $settings.profiles.list += $profile
-            $settings | ConvertTo-Json -Depth 20 | Set-Content $settingsPath
-            Write-Output "Profile added successfully."
-            """;
+		var script = string.Join( "\r\n",
+		[
+			$"$settingsPath = '{escapedSettingsPath}'",
+			$"$guid = '{ProfileGuid}'",
+			"$content = Get-Content $settingsPath -Raw",
+			"if ($content -match [regex]::Escape($guid)) {",
+			"    Write-Output \"Profile already exists — no change made.\"",
+			"    exit 0",
+			"}",
+			"$settings = $content | ConvertFrom-Json",
+			"$profile = [pscustomobject]@{",
+			"    guid = $guid",
+			$"    name = \"{profileName}\"",
+			"    commandline = 'pwsh.exe -NoExit -Command \"Write-Host ''DO NOT CLOSE this Terminal tab, it is needed for VPN support.'' -ForegroundColor Yellow; pproxy -l http://:8888\"'",
+			"    background = \"#08082E\"",
+			"    backgroundImage = \"C:\\BTR\\Extensibility\\PowerShell\\Icons\\vpn.png\"",
+			"    backgroundImageAlignment = \"bottomRight\"",
+			"    backgroundImageOpacity = 0.1",
+			"    backgroundImageStretchMode = \"none\"",
+			"    hidden = $false",
+			"    icon = \"C:\\BTR\\Extensibility\\PowerShell\\Icons\\vpn.png\"",
+			"    startingDirectory = \"C:\\BTR\\Extensibility\\PowerShell\"",
+			"}",
+			"$settings.profiles.list += $profile",
+			"$settings | ConvertTo-Json -Depth 20 | Set-Content $settingsPath",
+			"Write-Output \"Profile added successfully.\""
+		] );
 
 		var (code, output) = await ProcessHelper.RunPowerShellAsync( script );
 		progress.Report( output );

@@ -2,11 +2,11 @@ namespace ConduentResourceMonitor.Setup.Steps.Shared;
 
 public class GitProxyStep : ISetupStep
 {
-	private const string ProxyUrl = "http://conduent-resource:8888";
+	private static readonly string ProxyUrl = AppSettings.BuildProxyUrl( AppSettings.DefaultProxyAddress );
 	private const string GitKey = "http.https://tfs.acsgs.com.proxy";
 
 	public string Title => "Configure Git Proxy";
-	public string Description => "Sets the global git proxy for tfs.acsgs.com to route through conduent-resource:8888.";
+	public string Description => $"Sets the global git proxy for tfs.acsgs.com to route through {AppSettings.DefaultProxyAddress}.";
 	public bool RequiresElevation => false;
 	public bool IsManual => false;
 	public bool CanSkip => false;

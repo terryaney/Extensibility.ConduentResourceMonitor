@@ -5,20 +5,15 @@ namespace ConduentResourceMonitor.Setup.Steps.Shared;
 public class WindowsProxyStep( SetupContext ctx ) : ISetupStep
 {
 	private readonly SetupContext _ctx = ctx;
-	private string PacUrl => $"http://localhost:{_ctx.PacPort}/conduent-resource.pac";
+	private string PacUrl => AppSettings.BuildPacUrl( _ctx.PacPort );
 
 	public string Title => "Configure Windows Proxy Settings";
 	public string Description =>
-		$"""
-        Sets Windows to use the PAC file for automatic proxy configuration.
-
-        PAC URL: {PacUrl}
-
-        This routes corporate URLs through conduent-resource:8888 while
-        allowing direct connections for everything else.
-
-        Note: Chrome may cache proxy settings — visit chrome://net-internals/#proxy to reset if needed.
-        """;
+		"Sets Windows to use the PAC file for automatic proxy configuration.\r\n\r\n" +
+		$"PAC URL: {PacUrl}\r\n\r\n" +
+		$"This routes corporate URLs through {AppSettings.DefaultProxyAddress} while\r\n" +
+		"allowing direct connections for everything else.\r\n\r\n" +
+		"Note: Chrome may cache proxy settings — visit chrome://net-internals/#proxy to reset if needed.";
 	public bool RequiresElevation => false;
 	public bool IsManual => false;
 	public bool CanSkip => false;

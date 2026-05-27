@@ -17,7 +17,7 @@ public class ProxyCheck( AppSettings settings ) : ICheck
 			_client?.Dispose();
 			var handler = new HttpClientHandler
 			{
-				Proxy = new WebProxy( $"http://{_settings.ProxyAddress}" ),
+				Proxy = new WebProxy( _settings.ProxyUrl ),
 				UseProxy = true,
 				ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
 			};

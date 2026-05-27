@@ -247,7 +247,7 @@ internal static class Program
 			Console.WriteLine( "  ConduentResourceMonitor.exe --mode Hub [options]" );
 			Console.WriteLine();
 			Console.WriteLine( "What Hub Monitors:" );
-			Console.WriteLine( "  VPN/pproxy    HTTP to internal Conduent URL via conduent-resource:8888" );
+			Console.WriteLine( $"  VPN/pproxy    HTTP to internal Conduent URL via {defaults.ProxyAddress}" );
 			Console.WriteLine( "  Port Forward  TCP connect to localhost:8888 and localhost:13389" );
 			Console.WriteLine( "  WireGuard     Hub-Tunnel service running" );
 			Console.WriteLine();
@@ -269,9 +269,9 @@ internal static class Program
 			Console.WriteLine( "  ConduentResourceMonitor.exe --mode Travel [options]" );
 			Console.WriteLine();
 			Console.WriteLine( "What Travel Monitors:" );
-			Console.WriteLine( "  VPN/pproxy    HTTP to internal Conduent URL via conduent-resource:8888" );
+			Console.WriteLine( $"  VPN/pproxy    HTTP to internal Conduent URL via {defaults.ProxyAddress}" );
 			Console.WriteLine( "  Port Forward  TCP connect to conduent-resource:13389" );
-			Console.WriteLine( "  PAC Server    HTTP to localhost:8080/conduent-resource.pac" );
+			Console.WriteLine( $"  PAC Server    HTTP to localhost:{defaults.PacPort}/{defaults.PacFileName}" );
 			Console.WriteLine( "  WireGuard     Travel tunnel service running" );
 			Console.WriteLine();
 			Console.WriteLine( "Options:" );
