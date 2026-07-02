@@ -6,14 +6,16 @@ public class PortProxyRulesStep( SetupContext ctx ) : ISetupStep
 	public string Description =>
 		$"""
         Creates netsh port proxy rules:
-          Hub:8888  → {ConnectHost}:8888   (pproxy / VPN)
+          Hub:8888  → {ConnectHost}:8888   (proxy / VPN)
           Hub:13389 → {ConnectHost}:3389   (RDP to Resource)
 
         Requires administrator access.
         """;
 	public bool RequiresElevation => true;
 	public bool IsManual => false;
-	public bool CanSkip => false;
+	// netsh portproxy add fails when the listen port entry already exists.
+	public bool RerunWhenComplete => false;
+	public IReadOnlyList<SetupInput> Inputs => [ctx.ResourceStaticIpInput()];
 
 	private string ConnectHost => string.IsNullOrEmpty( ctx.ResourceStaticIp ) ? "conduent-resource" : ctx.ResourceStaticIp;
 

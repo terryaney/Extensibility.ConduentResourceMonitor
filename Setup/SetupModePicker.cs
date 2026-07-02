@@ -36,7 +36,7 @@ internal class SetupModePicker : Form
 		};
 		_rbResource = new RadioButton
 		{
-			Text = "Resource — Conduent laptop; runs pproxy to share corporate VPN with Hub and Travel.",
+			Text = "Resource — Conduent laptop; runs the native proxy to share corporate VPN with Hub and Travel.",
 			AutoSize = true,
 			Margin = new Padding( 0, 4, 0, 4 )
 		};

@@ -3,10 +3,11 @@ namespace ConduentResourceMonitor.Setup.Steps.Hub;
 public class FirewallRulesStep : ISetupStep
 {
 	public string Title => "Configure Firewall Rules";
-	public string Description => "Adds Windows Firewall inbound rules for ports 8888 (pproxy) and 13389 (RDP to Resource).\r\nRequires administrator access.";
+	public string Description => "Adds Windows Firewall inbound rules for ports 8888 (proxy) and 13389 (RDP to Resource).\r\nRequires administrator access.";
 	public bool RequiresElevation => true;
 	public bool IsManual => false;
-	public bool CanSkip => false;
+	// netsh add rule with an existing name creates a duplicate rule rather than updating it.
+	public bool RerunWhenComplete => false;
 
 	public async Task<bool> IsAlreadyCompleteAsync()
 	{
@@ -33,8 +34,18 @@ public class FirewallRulesStep : ISetupStep
 				Description = "Adding firewall rule WireGuard Port 13389"
 			}
 		};
-		await ProcessHelper.RunElevatedCommandsAsync( commands );
+		var (exitCode, output) = await ProcessHelper.RunElevatedCommandsWithOutputAsync( commands, progress.Report, continueOnFailure: true );
 		var ok = await IsAlreadyCompleteAsync();
-		return new SetupStepResult( ok, ok ? "Firewall rules configured." : "Could not verify firewall rules. Check output window." );
+		if ( ok )
+			return new SetupStepResult( true, "Firewall rules configured." );
+
+		if ( exitCode != 0 )
+		{
+			var message = ProcessHelper.BuildElevatedFailureMessage( "Firewall rule setup", exitCode, output );
+			progress.Report( message );
+			return new SetupStepResult( false, $"{message}\r\nCheck setup.log." );
+		}
+
+		return new SetupStepResult( ok, ok ? "Firewall rules configured." : "Could not verify firewall rules. Check setup.log." );
 	}
 }

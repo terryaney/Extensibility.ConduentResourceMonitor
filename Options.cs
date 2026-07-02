@@ -2,20 +2,20 @@ using CommandLine;
 
 namespace ConduentResourceMonitor;
 
-public enum AppMode { Hub, Travel }
+public enum AppMode { Hub, Travel, Resource }
 
 public enum SetupMode { Hub, Travel, Resource }
 
 public class Options
 {
-	[Option( "mode", Required = false, HelpText = "Hub or Travel. If omitted, inferred from settings file if exactly one exists." )]
+	[Option( "mode", Required = false, HelpText = "Hub, Travel, or Resource. If omitted, inferred from settings file if exactly one exists." )]
 	public AppMode? Mode { get; set; }
 
 	// CLI-only — intentionally absent from AppSettings so it is never persisted
 	[Option( "repair-on-start", Required = false, HelpText = "Hub only: immediately run port proxy repair on launch (use for startup shortcut)" )]
 	public bool RepairOnStart { get; set; }
 
-	[Option( "check-url", Required = false, HelpText = "URL for VPN/pproxy health check" )]
+	[Option( "check-url", Required = false, HelpText = "URL for Resource VPN health check" )]
 	public string? CheckUrl { get; set; }
 
 	[Option( "tunnel-name", Required = false, HelpText = "WireGuard tunnel/service name" )]

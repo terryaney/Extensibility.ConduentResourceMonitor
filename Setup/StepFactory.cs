@@ -15,49 +15,41 @@ internal static class StepFactory
 		_ => throw new ArgumentOutOfRangeException( nameof( mode ) )
 	};
 
-	private static List<ISetupStep> BuildHub( SetupContext ctx )
-	{
-		var steps = new List<ISetupStep> { new RouterConfirmStep( ctx ) };
-		if ( !ctx.SkipWireGuard )
-		{
-			steps.Add( new InstallWireGuardStep() );
-			steps.Add( new GenerateAllKeysStep( ctx ) );
-			steps.Add( new InstallHubTunnelStep( ctx ) );
-		}
-		steps.AddRange( [
-			new FirewallRulesStep(),
-			new PortProxyRulesStep(ctx),
-			new HostsFileStep(ctx.ResourceStaticIp, "conduent-resource"),
-			new GitProxyStep(),
-			new InstallPythonStep(),
-			new CreatePacFileStep(ctx.ConfDirectory),
-			new WindowsProxyStep(ctx),
-			new StartupShortcutStep(SetupMode.Hub, ctx),
-			new ShowTravelConfsStep(ctx),
-		] );
-		return steps;
-	}
+	// The WireGuard steps are always present — a LAN-only Hub just skips them; Program.cs
+	// derives the SkipWireGuard runtime setting from what was skipped in the wizard.
+	private static List<ISetupStep> BuildHub( SetupContext ctx ) =>
+	[
+		new RouterConfirmStep(ctx),
+		new InstallWireGuardStep(),
+		new GenerateAllKeysStep(ctx),
+		new InstallHubTunnelStep(ctx),
+		new FirewallRulesStep(),
+		new PortProxyRulesStep(ctx),
+		new HostsFileStep(() => ctx.ResourceStaticIp, "conduent-resource", ctx.ResourceStaticIpInput()),
+		new GitProxyStep(),
+		new CreatePacFileStep(ctx),
+		new WindowsProxyStep(ctx),
+		new DevSettingsStep(),
+		new StartupShortcutStep(SetupMode.Hub, ctx),
+		new ShowTravelConfsStep(ctx),
+	];
 
 	private static List<ISetupStep> BuildTravel( SetupContext ctx ) =>
 	[
-		new InstallWireGuardStep(canSkip: false),
+		new InstallWireGuardStep(),
 		new VerifyConfFileStep(ctx),
 		new InstallTravelTunnelStep(ctx),
-		new HostsFileStep("10.0.0.1", "conduent-resource"),
+		new HostsFileStep(() => "10.0.0.1", "conduent-resource"),
 		new GitProxyStep(),
-		new InstallPythonStep(),
-		new CreatePacFileStep(ctx.ConfDirectory),
+		new CreatePacFileStep(ctx),
 		new WindowsProxyStep(ctx),
+		new DevSettingsStep(),
 		new StartupShortcutStep(SetupMode.Travel, ctx),
 	];
 
 	private static List<ISetupStep> BuildResource( SetupContext ctx ) =>
 	[
-		new InstallPythonStep(),
-		new InstallPproxyStep(),
-		new PproxyFirewallStep(),
-		new TerminalProfileStep(),
+		new VpnProxyFirewallStep(ctx),
 		new StartupShortcutStep(SetupMode.Resource, ctx),
-		new DevSettingsStep(),
 	];
 }

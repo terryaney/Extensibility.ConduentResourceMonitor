@@ -6,17 +6,19 @@ namespace ConduentResourceMonitor;
 public class AppSettings
 {
 	public const string DefaultProxyAddress = "conduent-resource:8888";
+	public const string DefaultResourceProxyAddress = "localhost:8888";
 	public const string DefaultPacFileName = "conduent-resource.pac";
-	public const string ResourceProviderTerminalProfileName = "Conduent-Resource - Resource Provider";
 
-	public string? Mode { get; set; }  // "Hub" or "Travel" — saved so bare exe launch works
+	public string? Mode { get; set; }  // "Hub", "Travel", or "Resource" — saved so bare exe launch works
 	public string CheckUrl { get; set; } = "https://hrspwebtools001.americas.oneacs.com/msl";
 	public string ProxyAddress { get; set; } = DefaultProxyAddress;
 	public int PacPort { get; set; } = 8080;
 	public string PacDirectory { get; set; } = @"C:\BTR\Extensibility\ConduentResource";
 	public string TunnelName { get; set; } = "Hub-Tunnel";
+	public bool SkipWireGuard { get; set; }  // Hub-only LAN setup: serve PAC/proxy without WireGuard monitoring
 	public string ConfFilePath { get; set; } = "";  // Travel: last-used WireGuard .conf path
 	public string ResourceStaticIp { get; set; } = "10.0.0.1";  // Travel default; Hub overwrites with actual LAN IP
+	public string HubStaticIp { get; set; } = "";  // Resource: set during --setup Resource, pre-fills repeat runs; not used at app runtime
 	public int CheckIntervalSeconds { get; set; } = 30;
 	public int NotifyTimeoutMs { get; set; } = 5000;
 
@@ -63,7 +65,16 @@ public class AppSettings
 	public void ApplyOverrides( Options options )
 	{
 		// --mode overrides saved mode; --repair-on-start is CLI-only and never touches settings
-		if ( options.Mode.HasValue ) Mode = options.Mode.Value.ToString();
+		if ( options.Mode.HasValue )
+		{
+			var newModeStr = options.Mode.Value.ToString();
+			// One-time default swap on the transition into Resource — Resource is its own proxy
+			// origin, so conduent-resource:8888 (which only resolves via Hub/Travel's hosts file)
+			// is meaningless there. Guarded so it never stomps a value the operator later hand-edits.
+			if ( newModeStr != Mode && options.Mode.Value == ConduentResourceMonitor.AppMode.Resource && ProxyAddress == DefaultProxyAddress )
+				ProxyAddress = DefaultResourceProxyAddress;
+			Mode = newModeStr;
+		}
 		if ( options.CheckUrl != null ) CheckUrl = options.CheckUrl;
 		if ( options.TunnelName != null ) TunnelName = options.TunnelName;
 		if ( options.PacDirectory != null ) PacDirectory = options.PacDirectory;
@@ -77,7 +88,7 @@ public class AppSettings
 		var errors = new List<string>();
 
 		if ( AppMode == null )
-			errors.Add( "Mode is required — select Hub or Travel in Settings" );
+			errors.Add( "Mode is required — select Hub, Travel, or Resource in Settings" );
 
 		if ( string.IsNullOrWhiteSpace( CheckUrl ) )
 			errors.Add( "Check URL is required" );
@@ -87,16 +98,22 @@ public class AppSettings
 		if ( string.IsNullOrWhiteSpace( ProxyAddress ) )
 			errors.Add( "Proxy Address is required" );
 
-		if ( string.IsNullOrWhiteSpace( TunnelName ) )
-			errors.Add( "Tunnel Name is required" );
+		// Resource uses neither WireGuard nor PAC serving — these fields are hidden from its
+		// Settings UI, so they must not be able to block startup with stale values left over
+		// from a prior Hub/Travel configuration on the same shared settings file.
+		if ( AppMode != ConduentResourceMonitor.AppMode.Resource )
+		{
+			if ( string.IsNullOrWhiteSpace( TunnelName ) )
+				errors.Add( "Tunnel Name is required" );
 
-		if ( string.IsNullOrWhiteSpace( PacDirectory ) )
-			errors.Add( "PAC Directory is required" );
-		else if ( !Directory.Exists( PacDirectory ) )
-			errors.Add( $"PAC Directory does not exist: '{PacDirectory}'" );
+			if ( string.IsNullOrWhiteSpace( PacDirectory ) )
+				errors.Add( "PAC Directory is required" );
+			else if ( !Directory.Exists( PacDirectory ) )
+				errors.Add( $"PAC Directory does not exist: '{PacDirectory}'" );
 
-		if ( PacPort is < 1 or > 65535 )
-			errors.Add( $"PAC Port must be between 1 and 65535 (got {PacPort})" );
+			if ( PacPort is < 1 or > 65535 )
+				errors.Add( $"PAC Port must be between 1 and 65535 (got {PacPort})" );
+		}
 
 		if ( CheckIntervalSeconds < 5 )
 			errors.Add( $"Check Interval must be at least 5 seconds (got {CheckIntervalSeconds})" );

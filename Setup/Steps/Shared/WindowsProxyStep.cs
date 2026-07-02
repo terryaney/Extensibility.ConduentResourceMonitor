@@ -16,7 +16,6 @@ public class WindowsProxyStep( SetupContext ctx ) : ISetupStep
 		"Note: Chrome may cache proxy settings — visit chrome://net-internals/#proxy to reset if needed.";
 	public bool RequiresElevation => false;
 	public bool IsManual => false;
-	public bool CanSkip => false;
 
 	public Task<bool> IsAlreadyCompleteAsync()
 	{

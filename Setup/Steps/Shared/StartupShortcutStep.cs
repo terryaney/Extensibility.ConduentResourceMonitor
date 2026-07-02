@@ -8,13 +8,12 @@ public class StartupShortcutStep( SetupMode mode, SetupContext ctx ) : ISetupSte
 	public string Title => "Create Startup Shortcut";
 	public bool RequiresElevation => false;
 	public bool IsManual => false;
-	public bool CanSkip => false;
 
 	public string Description => _mode switch
 	{
 		SetupMode.Hub => "Creates a startup shortcut that launches the Resource Monitor in Hub mode with --repair-on-start.",
 		SetupMode.Travel => "Creates a startup shortcut that launches the Resource Monitor in Travel mode.",
-		SetupMode.Resource => "Creates a startup shortcut that launches the pproxy terminal profile via Windows Terminal.",
+		SetupMode.Resource => "Creates a startup shortcut that launches the Resource Monitor in Resource mode.",
 		_ => ""
 	};
 
@@ -22,7 +21,7 @@ public class StartupShortcutStep( SetupMode mode, SetupContext ctx ) : ISetupSte
 	{
 		SetupMode.Hub => "Conduent Resource Monitor - Hub.lnk",
 		SetupMode.Travel => "Conduent Resource Monitor - Travel.lnk",
-		SetupMode.Resource => $"{AppSettings.ResourceProviderTerminalProfileName}.lnk",
+		SetupMode.Resource => "Conduent Resource Monitor - Resource.lnk",
 		_ => "Conduent.lnk"
 	};
 
@@ -39,22 +38,18 @@ public class StartupShortcutStep( SetupMode mode, SetupContext ctx ) : ISetupSte
 			dynamic shell = Activator.CreateInstance( Type.GetTypeFromProgID( "WScript.Shell" )! )!;
 			dynamic lnk = shell.CreateShortcut( ShortcutPath );
 
-			if ( _mode == SetupMode.Resource )
+			var exePath = Path.Combine( AppContext.BaseDirectory, "ConduentResourceMonitor.exe" );
+			var args = _mode switch
 			{
-				lnk.TargetPath = "wt.exe";
-				lnk.Arguments = $"-p \"{AppSettings.ResourceProviderTerminalProfileName}\"";
-				lnk.WorkingDirectory = @"C:\BTR\Extensibility\PowerShell";
-				lnk.IconLocation = @"C:\BTR\Extensibility\PowerShell\Icons\vpn.png";
-			}
-			else
-			{
-				var exePath = Path.Combine( AppContext.BaseDirectory, "ConduentResourceMonitor.exe" );
-				var args = _mode == SetupMode.Hub ? "--mode Hub --repair-on-start" : "--mode Travel";
-				lnk.TargetPath = exePath;
-				lnk.Arguments = args;
-				lnk.WorkingDirectory = AppContext.BaseDirectory;
-				lnk.IconLocation = @"C:\BTR\Extensibility\PowerShell\Icons\vpn.png";
-			}
+				SetupMode.Hub => "--mode Hub --repair-on-start",
+				SetupMode.Travel => "--mode Travel",
+				SetupMode.Resource => "--mode Resource",
+				_ => ""
+			};
+			lnk.TargetPath = exePath;
+			lnk.Arguments = args;
+			lnk.WorkingDirectory = AppContext.BaseDirectory;
+			lnk.IconLocation = @"C:\BTR\Extensibility\PowerShell\Icons\vpn.png";
 
 			lnk.Save();
 

@@ -9,7 +9,9 @@ This document covers two things:
 
 ## What the Wizard Does
 
-The `--setup` wizard walks through each step, checks whether it's already complete (idempotent), and only runs steps that need action. Steps that require administrator access show a UAC prompt. Manual steps show instructions with a "Mark Done" button.
+The `--setup` wizard walks through each step in order. Inputs a step needs (IPs, paths, machine names) are collected on the step itself — pre-filled from saved settings and validated when you click Next. Every step has a Skip button. Next runs the step: steps that are safe to repeat simply re-run, while steps that shouldn't be repeated (installs, key generation, firewall/port rules) first run the "Already-Complete Check" shown below and skip the action when it passes. Steps that require administrator access show a UAC prompt. Manual steps describe actions to take — clicking Next marks them done.
+
+Detailed output for every step is written to `setup.log` next to the exe (falling back to `%LocalAppData%\ConduentResourceMonitor\setup.log` when the install folder is read-only); on-screen failure messages include the full path.
 
 ### Hub Steps
 
@@ -23,13 +25,15 @@ The `--setup` wizard walks through each step, checks whether it's already comple
 | 5 | Configure Port Proxy Rules | Auto | Yes | `netsh interface portproxy show all` contains 8888 and 13389 |
 | 6 | Update Hosts File | Auto | Yes | `hosts` file contains `conduent-resource` entry with Resource IP |
 | 7 | Configure Git Proxy | Auto | No | `git config --global` value set; **skipped** if git not installed |
-| 8 | Install Python | Auto | No | `python --version` ≥ 3.12 |
-| 9 | Create PAC File | Auto | No | `conduent-resource.pac` exists in conf dir |
-| 10 | Configure Windows Proxy Settings | Auto | No | `AutoConfigURL` registry value set in `HKCU\...\Internet Settings` |
+| 8 | Create PAC File | Auto | No | `conduent-resource.pac` exists in conf dir |
+| 9 | Configure Windows Proxy Settings | Auto | No | `AutoConfigURL` registry value set in `HKCU\...\Internet Settings` |
+| 10 | Create Developer Settings File | Auto | No | `C:\BTR\GlobalConfiguration\CamelotSettings.Api.WebService.Proxy.json` exists |
 | 11 | Create Startup Shortcut | Auto | No | Shortcut `.lnk` exists in `%APPDATA%\...\Startup` |
 | 12 | Travel Config File Locations | Manual | — | Auto-complete when all Travel `.conf` files exist |
 
-Step 1 is skipped if **Skip WireGuard** is checked in the pre-flight dialog (for LAN-only setups with no remote access needed).
+Inputs are collected on the steps that use them and shared — a value entered once pre-fills later steps that declare it: Router Configuration collects Resource's static IP (re-shown on Port Proxy and Hosts File); Generate Keys collects Hub's public IP (auto-fetched), the config directory, and Travel machine names (config directory re-shown on Create PAC File).
+
+For a LAN-only Hub (no remote/Travel access needed), skip steps 1–3 with the Skip button — the monitor's `SkipWireGuard` runtime setting is derived from whether the Hub tunnel service install was skipped.
 
 All WireGuard keys are generated on Hub in step 2 using `wg genkey` / `wg pubkey`. Output:
 - `Hub-Tunnel.conf` — Hub's private key + one `[Peer]` per Travel machine
@@ -37,7 +41,7 @@ All WireGuard keys are generated on Hub in step 2 using `wg genkey` / `wg pubkey
 
 ### Travel Steps
 
-Pre-flight hard block: the `.conf` file (generated on Hub) must exist and be a valid WireGuard config before the wizard opens.
+The `.conf` file path (generated on Hub) is collected on the Verify / Copy Config File step — auto-detected from an installed `WireGuardTunnel$*` service or a single `.conf` in the config directory when possible, and validated as a WireGuard config when you click Next.
 
 | # | Step | Type | Elevation | Already-Complete Check |
 |---|---|---|---|---|
@@ -46,21 +50,21 @@ Pre-flight hard block: the `.conf` file (generated on Hub) must exist and be a v
 | 3 | Install Travel Tunnel Service | Auto | Yes | Service `WireGuardTunnel$<name>` exists |
 | 4 | Update Hosts File | Auto | Yes | `hosts` contains `10.0.0.1  conduent-resource` |
 | 5 | Configure Git Proxy | Auto | No | `git config --global` value set; **skipped** if git not installed |
-| 6 | Install Python | Auto | No | `python --version` ≥ 3.12 |
-| 7 | Create PAC File | Auto | No | `conduent-resource.pac` exists in conf dir |
-| 8 | Configure Windows Proxy Settings | Auto | No | `AutoConfigURL` registry value set in `HKCU\...\Internet Settings` |
+| 6 | Create PAC File | Auto | No | `conduent-resource.pac` exists in conf dir |
+| 7 | Configure Windows Proxy Settings | Auto | No | `AutoConfigURL` registry value set in `HKCU\...\Internet Settings` |
+| 8 | Create Developer Settings File | Auto | No | `C:\BTR\GlobalConfiguration\CamelotSettings.Api.WebService.Proxy.json` exists |
 | 9 | Create Startup Shortcut | Auto | No | Shortcut `.lnk` exists in Startup folder |
 
 ### Resource Steps
 
+Hub's static LAN IP (assigned during router setup — see [Router Setup](#router-setup)) is collected on the Configure Proxy Firewall Rule step and used to scope the rule. Saved to `ResourceMonitor.settings.json` so repeat `--setup Resource` runs pre-fill it.
+
 | # | Step | Type | Elevation | Already-Complete Check |
 |---|---|---|---|---|
-| 1 | Install Python | Auto | No | `python --version` ≥ 3.12 |
-| 2 | Install pproxy | Auto | No | `pip show pproxy` exits 0 |
-| 3 | Configure pproxy Firewall Rule | Auto | Yes | `netsh advfirewall firewall show rule name="pproxy"` returns data |
-| 4 | Add Windows Terminal Profile | Auto | No | Profile GUID `{7c2d8c34-...}` found in `settings.json`; **hard block** if `wt.exe` not in PATH |
-| 5 | Create Startup Shortcut | Auto | No | Shortcut `.lnk` exists in Startup folder |
-| 6 | Create Developer Settings File | Auto | No | `C:\BTR\GlobalConfiguration\CamelotSettings.Api.WebService.Proxy.json` exists |
+| 1 | Configure Proxy Firewall Rule | Auto | Yes | `netsh advfirewall firewall show rule name="CRM - VPN Proxy"` returns data |
+| 2 | Create Startup Shortcut | Auto | No | Shortcut `.lnk` exists in Startup folder |
+
+Resource runs no Python, pip, or third-party proxy tool — the corporate VPN is exposed on port `8888` by the tray monitor itself, running as `--mode Resource`. It also doesn't get the Developer Settings File — `conduent-resource` (used inside that file) only resolves via a hosts-file entry that Hub/Travel get, not Resource, so writing it there would point at a hostname Resource can't itself reach.
 
 ### --add-travel-config
 
@@ -225,40 +229,19 @@ git config --global http.https://tfs.acsgs.com.proxy http://conduent-resource:88
 
 ---
 
-### pproxy Setup
+### VPN Proxy (Resource)
 
-On `Resource`, from an **administrative** terminal:
+`Resource` no longer runs Python, pip, or a third-party proxy tool. `ConduentResourceMonitor.exe --mode Resource` **is** the proxy — an in-process `TcpListener` on port `8888` that handles both `CONNECT` tunneling (HTTPS) and plain absolute-URI forwarding (HTTP), monitored and auto-repaired like any other check in this app.
 
+A scoped firewall rule is still required — run from an **administrative** terminal on `Resource` (the setup wizard's "Configure Proxy Firewall Rule" step does this automatically):
+
+```powershell
+netsh advfirewall firewall delete rule name="CRM - VPN Proxy"
+netsh advfirewall firewall add rule name="CRM - VPN Proxy" dir=in action=allow protocol=TCP localport=8888 profile=private remoteip=<HUB_STATIC_LAN_IP>
+netsh advfirewall firewall show rule name="CRM - VPN Proxy" verbose
 ```
-winget install Python.Python.3.12 --source winget
-```
-Restart terminal, then:
-```
-pip install pproxy
-New-NetFirewallRule -DisplayName "pproxy" -Direction Inbound -LocalPort 8888 -Protocol TCP -Action Allow
-```
 
----
-
-### Windows Terminal Profile (Resource)
-
-From Windows Terminal → Settings → `Open JSON file`, add to `profiles.list`:
-
-```json
-{
-    "background": "#08082E",
-    "backgroundImage": "C:\\BTR\\Extensibility\\PowerShell\\Icons\\vpn.png",
-    "backgroundImageAlignment": "bottomRight",
-    "backgroundImageOpacity": 0.1,
-    "backgroundImageStretchMode": "none",
-    "commandline": "pwsh.exe -NoExit -Command \"Write-Host 'DO NOT CLOSE this Terminal tab, it is needed for VPN support.' -ForegroundColor Yellow; pproxy -l http://:8888\"",
-    "guid": "{7c2d8c34-4f7a-4d1f-8f5d-8b7c4b6b9cda}",
-    "hidden": false,
-    "icon": "C:\\BTR\\Extensibility\\PowerShell\\Icons\\vpn.png",
-    "name": "Conduent-Resource - Resource Provider",
-    "startingDirectory": "C:\\BTR\\Extensibility\\PowerShell"
-}
-```
+`remoteip` only ever needs Hub's static LAN IP — Travel never talks to Resource directly, it reaches `conduent-resource:8888` via the WireGuard tunnel to Hub, and Hub's own `netsh portproxy` rule forwards it onward. The `delete` first makes this safe to re-run if Hub's IP ever changes.
 
 ---
 
@@ -283,10 +266,7 @@ function FindProxyForURL(url, host) {
 }
 ```
 
-Install Python (for the PAC server that the monitor runs):
-```
-winget install Python.Python.3.12 --source winget
-```
+The monitor serves this file itself — a native `TcpListener` on `Hub`/`Travel`, no Python or external process involved.
 
 The wizard sets Windows proxy on both Hub and Travel via the "Configure Windows Proxy Settings" step: **Settings → Network & internet → Proxy → Use setup script** → `http://localhost:8080/conduent-resource.pac`.
 
@@ -319,14 +299,15 @@ Create `C:\BTR\GlobalConfiguration\CamelotSettings.Api.WebService.Proxy.json`:
 
 All shortcuts go in `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup`.
 
-**Resource** — launches pproxy via Windows Terminal:
+**Resource** — launches the monitor in Resource mode (the monitor itself is the proxy):
 ```powershell
 $startup = [Environment]::GetFolderPath('Startup')
 $shell = New-Object -ComObject WScript.Shell
-$lnk = $shell.CreateShortcut("$startup\Conduent-Resource - Resource Provider.lnk")
-$lnk.TargetPath = (Get-Command wt.exe).Source
-$lnk.Arguments = '-p "Conduent-Resource - Resource Provider"'
-$lnk.WorkingDirectory = 'C:\BTR\Extensibility\PowerShell'
+$monitorDir = "C:\BTR\Extensibility\ConduentResource"
+$lnk = $shell.CreateShortcut("$startup\Conduent Resource Monitor - Resource.lnk")
+$lnk.TargetPath = "$monitorDir\ConduentResourceMonitor.exe"
+$lnk.Arguments = '--mode Resource'
+$lnk.WorkingDirectory = $monitorDir
 $lnk.IconLocation = 'C:\BTR\Extensibility\PowerShell\Icons\vpn.png'
 $lnk.Save()
 ```

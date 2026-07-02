@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using System.Reflection;
 using CommandLine;
 using ConduentResourceMonitor;
+using ConduentResourceMonitor.Services;
 using ConduentResourceMonitor.Setup;
 
 internal static class Program
@@ -110,19 +111,17 @@ internal static class Program
 
 	static void RunSetup( SetupMode mode, Options options )
 	{
+		// Inputs are collected by the wizard steps themselves — the context is only pre-filled
+		// here from saved settings and CLI options so those inputs start populated.
 		var settings = AppSettings.Load();
 		var ctx = new SetupContext
 		{
 			ConfDirectory = options.ConfDirectory ?? settings.PacDirectory,
 			PacPort = options.PacPort ?? settings.PacPort,
+			ResourceStaticIp = mode == SetupMode.Hub ? settings.ResourceStaticIp : "",
+			HubStaticIp = mode == SetupMode.Resource ? settings.HubStaticIp : "",
 			ConfFilePath = options.ConfFile ?? ( mode == SetupMode.Travel ? settings.ConfFilePath : "" )
 		};
-
-		// Show checklist overview first (before config) to show what will be done
-		using ( var checklist = new SetupChecklistForm( mode ) )
-		{
-			if ( checklist.ShowDialog() != DialogResult.OK ) return;
-		}
 
 		if ( mode == SetupMode.Travel )
 		{
@@ -143,44 +142,47 @@ internal static class Program
 					if ( found.Length == 1 ) ctx.ConfFilePath = found[ 0 ];
 				}
 			}
+		}
 
-			// Skip preflight if the steps that need the conf file are already complete
-			if ( TravelNeedsPreflight( ctx ) )
+		var wizardResult = DialogResult.Cancel;
+		var launchApplication = false;
+		var wireGuardSkipped = false;
+		using ( var wizard = new SetupWizardForm( mode, ctx ) )
+		{
+			wizardResult = wizard.ShowDialog();
+			launchApplication = wizard.LaunchApplication;
+			wireGuardSkipped = wizard.WireGuardSkipped;
+		}
+
+		if ( wizardResult == DialogResult.OK && mode == SetupMode.Hub )
+		{
+			// LAN-only Hub: the user skipped the WireGuard steps in the wizard, so runtime
+			// monitoring must not watch the tunnel.
+			var updatedSettings = AppSettings.Load();
+			updatedSettings.SkipWireGuard = wireGuardSkipped;
+			updatedSettings.Save();
+		}
+
+		if ( wizardResult == DialogResult.OK && launchApplication )
+		{
+			RunMonitor( new Options
 			{
-				using var preflight = new SetupPreflightForm( mode, ctx );
-				if ( preflight.ShowDialog() != DialogResult.OK ) return;
-			}
+				Mode = (AppMode)mode,
+				RepairOnStart = options.RepairOnStart,
+				CheckUrl = options.CheckUrl,
+				TunnelName = mode switch
+				{
+					SetupMode.Hub => SetupContext.HubTunnelName,
+					SetupMode.Travel => ctx.TravelTunnelName,
+					_ => options.TunnelName
+				},
+				PacDirectory = ctx.ConfDirectory,
+				PacPort = options.PacPort,
+				CheckIntervalSeconds = options.CheckIntervalSeconds,
+				NotifyTimeoutMs = options.NotifyTimeoutMs,
+				ShowLog = options.ShowLog
+			} );
 		}
-		else if ( mode != SetupMode.Resource )
-		{
-			using var preflight = new SetupPreflightForm( mode, ctx );
-			if ( preflight.ShowDialog() != DialogResult.OK ) return;
-		}
-
-		Application.Run( new SetupWizardForm( mode, ctx ) );
-	}
-
-	// Returns true if the preflight form needs to be shown to collect the conf file path.
-	// False when both conf-dependent steps (VerifyConfFile + InstallTravelTunnel) are already done.
-	static bool TravelNeedsPreflight( SetupContext ctx )
-	{
-		if ( string.IsNullOrEmpty( ctx.ConfFilePath ) ) return true;
-
-		var confInPlace = File.Exists( Path.Combine( ctx.ConfDirectory, Path.GetFileName( ctx.ConfFilePath ) ) );
-		if ( !confInPlace ) return true;
-
-		var tunnelName = Path.GetFileNameWithoutExtension( ctx.ConfFilePath );
-		try
-		{
-			using var sc = new System.ServiceProcess.ServiceController( $"WireGuardTunnel${tunnelName}" );
-			_ = sc.Status;
-		}
-		catch
-		{
-			return true;
-		}
-
-		return false;
 	}
 
 	static void RunMonitor( Options options )
@@ -247,8 +249,9 @@ internal static class Program
 			Console.WriteLine( "  ConduentResourceMonitor.exe --mode Hub [options]" );
 			Console.WriteLine();
 			Console.WriteLine( "What Hub Monitors:" );
-			Console.WriteLine( $"  VPN/pproxy    HTTP to internal Conduent URL via {defaults.ProxyAddress}" );
+			Console.WriteLine( $"  Resource VPN     HTTP to internal VPN URL via {defaults.ProxyAddress}" );
 			Console.WriteLine( "  Port Forward  TCP connect to localhost:8888 and localhost:13389" );
+			Console.WriteLine( $"  PAC Server    HTTP to localhost:{defaults.PacPort}/{defaults.PacFileName}" );
 			Console.WriteLine( "  WireGuard     Hub-Tunnel service running" );
 			Console.WriteLine();
 			Console.WriteLine( "Options:" );
@@ -269,7 +272,7 @@ internal static class Program
 			Console.WriteLine( "  ConduentResourceMonitor.exe --mode Travel [options]" );
 			Console.WriteLine();
 			Console.WriteLine( "What Travel Monitors:" );
-			Console.WriteLine( $"  VPN/pproxy    HTTP to internal Conduent URL via {defaults.ProxyAddress}" );
+			Console.WriteLine( $"  Resource VPN     HTTP to internal VPN URL via {defaults.ProxyAddress}" );
 			Console.WriteLine( "  Port Forward  TCP connect to conduent-resource:13389" );
 			Console.WriteLine( $"  PAC Server    HTTP to localhost:{defaults.PacPort}/{defaults.PacFileName}" );
 			Console.WriteLine( "  WireGuard     Travel tunnel service running" );
@@ -285,13 +288,30 @@ internal static class Program
 			Console.WriteLine();
 			Console.WriteLine( "Tip: Run -? without --mode for full help including setup options." );
 		}
+		else if ( mode == AppMode.Resource )
+		{
+			Console.WriteLine( "Usage:" );
+			Console.WriteLine( "  ConduentResourceMonitor.exe --mode Resource [options]" );
+			Console.WriteLine();
+			Console.WriteLine( "What Resource Monitors:" );
+			Console.WriteLine( $"  VPN Enabled   HTTP to internal Conduent URL via localhost:{ProxyServerService.Port}" );
+			Console.WriteLine( $"  VPN Proxy     TCP listener on localhost:{ProxyServerService.Port} (replaces pproxy)" );
+			Console.WriteLine();
+			Console.WriteLine( "Options:" );
+			OptFromOption( nameof( Options.CheckUrl ), defaultCheckUrl );
+			OptFromOption( nameof( Options.CheckIntervalSeconds ), defaultCheckInterval );
+			OptFromOption( nameof( Options.NotifyTimeoutMs ), defaultNotifyTimeout );
+			OptFromOption( nameof( Options.ShowLog ) );
+			Console.WriteLine();
+			Console.WriteLine( "Tip: Run -? without --mode for full help including setup options." );
+		}
 		else
 		{
 			Console.WriteLine( "Usage:" );
-			Console.WriteLine( "  ConduentResourceMonitor.exe --mode Hub|Travel [options]" );
+			Console.WriteLine( "  ConduentResourceMonitor.exe --mode Hub|Travel|Resource [options]" );
 			Console.WriteLine( "  ConduentResourceMonitor.exe --setup Hub|Travel|Resource [options]" );
 			Console.WriteLine( "  ConduentResourceMonitor.exe --add-travel-config" );
-			Console.WriteLine( "  ConduentResourceMonitor.exe -? [--mode Hub|Travel]" );
+			Console.WriteLine( "  ConduentResourceMonitor.exe -? [--mode Hub|Travel|Resource]" );
 			Console.WriteLine();
 			Console.WriteLine( "Monitor Options:" );
 			OptFromOption( nameof( Options.Mode ) );
@@ -312,7 +332,7 @@ internal static class Program
 			OptFromOption( nameof( Options.ConfDirectory ), defaultConfDirectory );
 			OptFromOption( nameof( Options.ConfFile ) );
 			Console.WriteLine();
-			Console.WriteLine( "Tip: Run -? --mode Hub or -? --mode Travel for mode-specific help." );
+			Console.WriteLine( "Tip: Run -? --mode Hub, -? --mode Travel, or -? --mode Resource for mode-specific help." );
 		}
 
 		Console.WriteLine();

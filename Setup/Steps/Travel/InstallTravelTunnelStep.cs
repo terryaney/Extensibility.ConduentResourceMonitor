@@ -13,7 +13,8 @@ public class InstallTravelTunnelStep( SetupContext ctx ) : ISetupStep
 	public string Description => $"Installs {TunnelName}.conf as a Windows service.\r\nConf file: {ConfPath}";
 	public bool RequiresElevation => true;
 	public bool IsManual => false;
-	public bool CanSkip => false;
+	// installtunnelservice fails if the service already exists.
+	public bool RerunWhenComplete => false;
 
 	public Task<bool> IsAlreadyCompleteAsync()
 	{
@@ -44,9 +45,15 @@ public class InstallTravelTunnelStep( SetupContext ctx ) : ISetupStep
 				Description = $"Installing Travel tunnel service '{TunnelName}'"
 			}
 		};
-		await ProcessHelper.RunElevatedCommandsAsync( commands );
+		var (exitCode, output) = await ProcessHelper.RunElevatedCommandsWithOutputAsync( commands, progress.Report );
+		if ( exitCode != 0 )
+		{
+			var message = ProcessHelper.BuildElevatedFailureMessage( "Travel tunnel service install", exitCode, output );
+			progress.Report( message );
+			return new SetupStepResult( false, $"{message}\r\nCheck setup.log." );
+		}
 
 		var ok = await IsAlreadyCompleteAsync();
-		return new SetupStepResult( ok, ok ? "Travel tunnel service installed." : "Service install may have failed." );
+		return new SetupStepResult( ok, ok ? "Travel tunnel service installed." : "Service install may have failed. Check setup.log." );
 	}
 }

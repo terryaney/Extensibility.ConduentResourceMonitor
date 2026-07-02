@@ -11,7 +11,8 @@ public class TrayApp : ApplicationContext
 	private readonly AppSettings _settings;
 	private readonly NotifyIcon _tray;
 	private readonly MonitorService _monitor;
-	private readonly PacServerService _pacServer;
+	private readonly PacServerService? _pacServer;
+	private readonly ProxyServerService? _proxyServer;
 	private readonly List<IRepair> _repairs;
 	private readonly LogForm _logForm;
 	private readonly Dictionary<string, int> _repairAttempts = [];
@@ -30,8 +31,20 @@ public class TrayApp : ApplicationContext
 
 		_logForm = new LogForm();
 
-		_pacServer = new PacServerService( settings );
-		_pacServer.Start();
+		if ( _mode == AppMode.Resource )
+		{
+			_proxyServer = new ProxyServerService();
+			_proxyServer.Start();
+			if ( _proxyServer.LastError != null )
+				_logForm.AppendLine( $"[{DateTime.Now:HH:mm:ss}] VPN Proxy failed to start: {_proxyServer.LastError}" );
+		}
+		else
+		{
+			_pacServer = new PacServerService( settings );
+			_pacServer.Start();
+			if ( _pacServer.LastError != null )
+				_logForm.AppendLine( $"[{DateTime.Now:HH:mm:ss}] PAC Web Server failed to start: {_pacServer.LastError}" );
+		}
 
 		var checks = BuildChecks( _mode, settings );
 		_repairs = BuildRepairs( _mode, settings, checks );
@@ -59,30 +72,65 @@ public class TrayApp : ApplicationContext
 		_ = _monitor.Start();
 	}
 
-	private static IReadOnlyList<ICheck> BuildChecks( AppMode mode, AppSettings settings )
+	private static bool IsLanOnlyHub( AppMode mode, AppSettings settings ) =>
+		mode == AppMode.Hub && settings.SkipWireGuard;
+
+	private static IReadOnlyList<ICheck> BuildChecks( AppMode mode, AppSettings settings ) => mode switch
 	{
-		return
+		AppMode.Hub when IsLanOnlyHub( mode, settings ) =>
 		[
-			new ProxyCheck( settings ),
-			mode == AppMode.Hub
-				? new PortForwardCheck("Port Proxy / Forwarding", "localhost", 8888, 13389)
-				: new PortForwardCheck("Resource RDP", "conduent-resource", 13389),
-			new PacServerCheck(settings),
-			new WireGuardCheck(settings)
-		];
-	}
+			new ProxyCheck( "Resource Proxy Connectivity", settings ),
+			new PortForwardCheck( "Port Proxy / Forwarding", "localhost", 8888, 13389 ),
+			new PacServerCheck( settings )
+		],
+		AppMode.Hub =>
+		[
+			new ProxyCheck( "Resource VPN", settings ),
+			new PortForwardCheck( "Port Proxy / Forwarding", "localhost", 8888, 13389 ),
+			new PacServerCheck( settings ),
+			new WireGuardCheck( settings )
+		],
+		AppMode.Travel =>
+		[
+			new ProxyCheck( "Resource VPN", settings ),
+			new PortForwardCheck( "Resource RDP", "conduent-resource", 13389 ),
+			new PacServerCheck( settings ),
+			new WireGuardCheck( settings )
+		],
+		AppMode.Resource =>
+		[
+			new ProxyCheck( "VPN Enabled", settings ),
+			new PortForwardCheck( "VPN Proxy", "localhost", ProxyServerService.Port )
+		],
+		_ => throw new ArgumentOutOfRangeException( nameof( mode ) )
+	};
 
 	private List<IRepair> BuildRepairs( AppMode mode, AppSettings settings, IReadOnlyList<ICheck> checks )
 	{
-		var repairs = new List<IRepair> { new ResourceVpnRepair( checks.First( i => i is ProxyCheck ) ) };
+		var proxyCheck = checks.First( i => i is ProxyCheck );
+		var repairs = new List<IRepair>();
 
-		if ( mode == AppMode.Hub )
+		switch ( mode )
 		{
-			repairs.Add( new PortProxyRepair( settings, checks.First( i => i is PortForwardCheck ) ) );
+			case AppMode.Hub:
+				repairs.Add( IsLanOnlyHub( mode, settings )
+					? new ResourceVpnRepair( proxyCheck, isLanOnly: true )
+					: new ResourceVpnRepair( proxyCheck ) );
+				repairs.Add( new PortProxyRepair( settings, checks.First( i => i is PortForwardCheck ) ) );
+				if ( !IsLanOnlyHub( mode, settings ) )
+					repairs.Add( new WireGuardRepair( settings, checks.First( i => i is WireGuardCheck ) ) );
+				repairs.Add( new PacServerRepair( _pacServer!, checks.First( i => i is PacServerCheck ) ) );
+				break;
+			case AppMode.Travel:
+				repairs.Add( new ResourceVpnRepair( proxyCheck ) );
+				repairs.Add( new WireGuardRepair( settings, checks.First( i => i is WireGuardCheck ) ) );
+				repairs.Add( new PacServerRepair( _pacServer!, checks.First( i => i is PacServerCheck ) ) );
+				break;
+			case AppMode.Resource:
+				repairs.Add( new LocalVpnRepair( proxyCheck ) );
+				repairs.Add( new ProxyServerRepair( _proxyServer!, checks.First( i => i is PortForwardCheck ) ) );
+				break;
 		}
-
-		repairs.Add( new WireGuardRepair( settings, checks.First( i => i is WireGuardCheck ) ) );
-		repairs.Add( new PacServerRepair( _pacServer, checks.First( i => i is PacServerCheck ) ) );
 
 		return repairs;
 	}
@@ -171,7 +219,7 @@ public class TrayApp : ApplicationContext
 			{
 				_monitor.UpdateInterval( _settings.CheckIntervalSeconds );
 				if ( _settings.PacPort != oldPort || _settings.PacDirectory != oldDir )
-					_pacServer.Restart();
+					_pacServer?.Restart();
 			}
 		};
 		menu.Items.Add( settingsItem );
@@ -186,7 +234,8 @@ public class TrayApp : ApplicationContext
 	private void Shutdown()
 	{
 		_monitor.Stop();
-		_pacServer.Stop();
+		_pacServer?.Stop();
+		_proxyServer?.Stop();
 		_tray.Visible = false;
 		_tray.Dispose();
 		Application.Exit();
@@ -266,7 +315,8 @@ public class TrayApp : ApplicationContext
 		if ( disposing )
 		{
 			_monitor.Stop();
-			_pacServer.Stop();
+			_pacServer?.Stop();
+			_proxyServer?.Stop();
 			_logForm.Dispose();
 			_greenIcon.Dispose();
 			_redIcon.Dispose();

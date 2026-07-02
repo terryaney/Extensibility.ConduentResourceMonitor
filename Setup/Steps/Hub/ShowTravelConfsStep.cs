@@ -7,7 +7,6 @@ public class ShowTravelConfsStep( SetupContext ctx ) : ISetupStep
 	public string Title => "Travel Machine Config Files";
 	public bool RequiresElevation => false;
 	public bool IsManual => true;
-	public bool CanSkip => false;
 
 	public string Description
 	{
@@ -27,7 +26,7 @@ public class ShowTravelConfsStep( SetupContext ctx ) : ISetupStep
 				lines.AppendLine( $"    Then run: ConduentResourceMonitor.exe --setup Travel --conf-file \"{path}\"" );
 				lines.AppendLine();
 			}
-			lines.AppendLine( "Click 'Mark Done' when you have noted the above locations." );
+			lines.AppendLine( "When you have noted the above locations, click Next to continue." );
 			return lines.ToString();
 		}
 	}

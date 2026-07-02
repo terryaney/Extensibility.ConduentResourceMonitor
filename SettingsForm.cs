@@ -4,9 +4,12 @@ public class SettingsForm : Form
 {
 	private readonly AppSettings _settings;
 	private readonly Dictionary<string, TextBox> _fields = [];
+	private readonly Dictionary<string, Label> _labels = [];
 	private readonly ComboBox _modeCombo;
 	private bool _tunnelNameModified;
 	private bool _settingTunnelName;
+	private bool _proxyAddressModified;
+	private bool _settingProxyAddress;
 
 	public SettingsForm( AppSettings settings, bool allowModeChange = true, IReadOnlyList<string>? validationErrors = null )
 	{
@@ -77,7 +80,7 @@ public class SettingsForm : Form
 			Enabled = allowModeChange
 		};
 		
-		_modeCombo.Items.AddRange( "Hub", "Travel" );
+		_modeCombo.Items.AddRange( "Hub", "Travel", "Resource" );
 		
 		if ( settings.Mode != null ) _modeCombo.SelectedItem = settings.Mode;
 		_modeCombo.SelectedIndexChanged += OnModeChanged;
@@ -97,6 +100,12 @@ public class SettingsForm : Form
 		_fields[ nameof( AppSettings.TunnelName ) ].TextChanged += ( _, _ ) =>
 		{
 			if ( !_settingTunnelName ) _tunnelNameModified = true;
+		};
+
+		// Watch for manual edits to ProxyAddress so switching to Resource stops auto-filling it
+		_fields[ nameof( AppSettings.ProxyAddress ) ].TextChanged += ( _, _ ) =>
+		{
+			if ( !_settingProxyAddress ) _proxyAddressModified = true;
 		};
 
 		// Row 8: note
@@ -123,16 +132,29 @@ public class SettingsForm : Form
 		var errorHeight = validationErrors?.Count > 0 ? 20 + ( validationErrors.Count + 1 ) * 18 : 0;
 		Size = new Size( 580, 365 + errorHeight );
 		MinimumSize = Size;
+
+		UpdateFieldVisibility();
 	}
 
 	private void OnModeChanged( object? sender, EventArgs e )
 	{
-		if ( _tunnelNameModified ) return;
+		UpdateFieldVisibility();
+
 		if ( _modeCombo.SelectedItem is string mode )
 		{
-			_settingTunnelName = true;
-			_fields[ nameof( AppSettings.TunnelName ) ].Text = $"{mode}-Tunnel";
-			_settingTunnelName = false;
+			if ( !_tunnelNameModified )
+			{
+				_settingTunnelName = true;
+				_fields[ nameof( AppSettings.TunnelName ) ].Text = $"{mode}-Tunnel";
+				_settingTunnelName = false;
+			}
+
+			if ( mode == "Resource" && !_proxyAddressModified )
+			{
+				_settingProxyAddress = true;
+				_fields[ nameof( AppSettings.ProxyAddress ) ].Text = AppSettings.DefaultResourceProxyAddress;
+				_settingProxyAddress = false;
+			}
 		}
 	}
 
@@ -141,8 +163,19 @@ public class SettingsForm : Form
 		var lbl = new Label { Text = label, AutoSize = true, Anchor = AnchorStyles.Left | AnchorStyles.Right, Margin = new Padding( 0, 6, 8, 2 ) };
 		var tb = new TextBox { Text = value, Dock = DockStyle.Fill, Margin = new Padding( 0, 3, 0, 3 ) };
 		_fields[ key ] = tb;
+		_labels[ key ] = lbl;
 		layout.Controls.Add( lbl );
 		layout.Controls.Add( tb );
+	}
+
+	private void UpdateFieldVisibility()
+	{
+		var isResource = _modeCombo.SelectedItem as string == "Resource";
+		foreach ( var key in new[] { nameof( AppSettings.TunnelName ), nameof( AppSettings.PacDirectory ), nameof( AppSettings.PacPort ) } )
+		{
+			_fields[ key ].Visible = !isResource;
+			_labels[ key ].Visible = !isResource;
+		}
 	}
 
 	private void SaveSettings()

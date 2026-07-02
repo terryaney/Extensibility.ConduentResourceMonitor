@@ -7,7 +7,9 @@ public class GenerateAllKeysStep( SetupContext ctx ) : ISetupStep
 	public string Title => "Generate WireGuard Keys & Config Files";
 	public bool RequiresElevation => false;
 	public bool IsManual => false;
-	public bool CanSkip => false;
+	// Re-running would regenerate keys and orphan any Travel .conf files already deployed.
+	public bool RerunWhenComplete => false;
+	public IReadOnlyList<SetupInput> Inputs => [_ctx.HubPublicIpInput(), _ctx.ConfDirectoryInput(), _ctx.TravelMachineNamesInput()];
 
 	public string Description =>
 		$"""

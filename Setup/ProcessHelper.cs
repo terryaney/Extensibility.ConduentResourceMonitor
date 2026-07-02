@@ -64,7 +64,7 @@ internal static class ProcessHelper
 		}
 	}
 
-	public static async Task<(int ExitCode, string Output)> RunElevatedCommandsWithOutputAsync( IReadOnlyList<ElevatedCommand> commands, Action<string>? logLine = null )
+	public static async Task<(int ExitCode, string Output)> RunElevatedCommandsWithOutputAsync( IReadOnlyList<ElevatedCommand> commands, Action<string>? logLine = null, bool continueOnFailure = false )
 	{
 		var normalizedCommands = NormalizeElevatedCommands( commands );
 		var tempLog = Path.Combine( Path.GetTempPath(), $"setup_{Guid.NewGuid():N}.log" );
@@ -81,12 +81,14 @@ internal static class ProcessHelper
 			} ) );
 			var payloadB64 = Convert.ToBase64String( System.Text.Encoding.UTF8.GetBytes( payload ) );
 			var escapedLogPath = tempLog.Replace( "'", "''" );
+			var continueOnFailureLiteral = continueOnFailure ? "$true" : "$false";
 
 			var ps =
 				"$json=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + payloadB64 + "'));" +
 				"$commands=ConvertFrom-Json -InputObject $json;" +
 				"$sb=New-Object System.Text.StringBuilder;" +
 				"$overall=0;" +
+				"$continueOnFailure=" + continueOnFailureLiteral + ";" +
 				"foreach($c in $commands){" +
 				" if($c.Description){[void]$sb.AppendLine(('>> ' + [string]$c.Description));}" +
 				" $exe=[string]$c.FileName;" +
@@ -94,7 +96,7 @@ internal static class ProcessHelper
 				" $cmdExit=0;" +
 				" try{$o=(& $exe @argsArray 2>&1 | Out-String); if($o){[void]$sb.AppendLine($o.TrimEnd())}; if($null -ne $LASTEXITCODE){$cmdExit=[int]$LASTEXITCODE}else{$cmdExit=0}}catch{[void]$sb.AppendLine($_.Exception.Message);$cmdExit=1}" +
 				" $ok=@(0); if($null -ne $c.SuccessExitCodes -and @($c.SuccessExitCodes).Count -gt 0){$ok=@($c.SuccessExitCodes | ForEach-Object {[int]$_});}" +
-				" if($ok -notcontains [int]$cmdExit){[void]$sb.AppendLine(('Exit code: ' + $cmdExit));$overall=1;}" +
+				" if($ok -notcontains [int]$cmdExit){[void]$sb.AppendLine(('Exit code: ' + $cmdExit)); if([int]$cmdExit -eq 0){$overall=1}else{$overall=[int]$cmdExit}; if(-not $continueOnFailure){break}}" +
 				"}" +
 				"[System.IO.File]::WriteAllText('" + escapedLogPath + "',$sb.ToString());" +
 				"exit $overall;";
@@ -138,9 +140,53 @@ internal static class ProcessHelper
 		}
 	}
 
-	public static async Task<int> RunElevatedCommandsAsync( IReadOnlyList<ElevatedCommand> commands )
+	public static string BuildElevatedFailureMessage( string action, int exitCode, string output )
 	{
-		var (exitCode, _) = await RunElevatedCommandsWithOutputAsync( commands );
+		var detail = ExtractElevatedFailureDetail( output );
+		if ( string.IsNullOrWhiteSpace( detail ) )
+		{
+			detail = exitCode switch
+			{
+				-1 => "The elevated command did not start or the UAC prompt was canceled.",
+				_ => $"Exit code: {exitCode}"
+			};
+		}
+
+		return $"{action} failed: {detail}";
+	}
+
+	private static string ExtractElevatedFailureDetail( string output )
+	{
+		if ( string.IsNullOrWhiteSpace( output ) )
+			return string.Empty;
+
+		var lines = output.Split( ["\r\n", "\n"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries );
+		var exitIndex = Array.FindLastIndex( lines, line => line.StartsWith( "Exit code:", StringComparison.OrdinalIgnoreCase ) );
+		if ( exitIndex >= 0 )
+		{
+			var sectionStart = exitIndex - 1;
+			while ( sectionStart >= 0 && !lines[ sectionStart ].StartsWith( ">> ", StringComparison.Ordinal ) )
+				sectionStart--;
+
+			if ( exitIndex - 1 > sectionStart )
+				return lines[ exitIndex - 1 ];
+
+			return string.Empty;
+		}
+
+		for ( var i = lines.Length - 1; i >= 0; i-- )
+		{
+			if ( lines[ i ].StartsWith( ">> ", StringComparison.Ordinal ) )
+				continue;
+			return lines[ i ];
+		}
+
+		return lines.LastOrDefault() ?? string.Empty;
+	}
+
+	public static async Task<int> RunElevatedCommandsAsync( IReadOnlyList<ElevatedCommand> commands, bool continueOnFailure = false )
+	{
+		var (exitCode, _) = await RunElevatedCommandsWithOutputAsync( commands, continueOnFailure: continueOnFailure );
 		return exitCode;
 	}
 

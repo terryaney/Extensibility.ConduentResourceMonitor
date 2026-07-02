@@ -1,15 +1,14 @@
 namespace ConduentResourceMonitor.Setup.Steps.Shared;
 
-public class CreatePacFileStep( string confDirectory ) : ISetupStep
+public class CreatePacFileStep( SetupContext ctx ) : ISetupStep
 {
-	private readonly string _confDirectory = confDirectory;
-	private string PacPath => Path.Combine( _confDirectory, AppSettings.DefaultPacFileName );
+	private string PacPath => Path.Combine( ctx.ConfDirectory, AppSettings.DefaultPacFileName );
 
 	public string Title => "Create PAC File";
-	public string Description => $"Creates the {AppSettings.DefaultPacFileName} proxy auto-config file in:\r\n{_confDirectory}";
+	public string Description => $"Creates the {AppSettings.DefaultPacFileName} proxy auto-config file in:\r\n{ctx.ConfDirectory}";
 	public bool RequiresElevation => false;
 	public bool IsManual => false;
-	public bool CanSkip => false;
+	public IReadOnlyList<SetupInput> Inputs => [ctx.ConfDirectoryInput()];
 
 	public Task<bool> IsAlreadyCompleteAsync() => Task.FromResult( File.Exists( PacPath ) );
 
@@ -17,7 +16,7 @@ public class CreatePacFileStep( string confDirectory ) : ISetupStep
 	{
 		try
 		{
-			Directory.CreateDirectory( _confDirectory );
+			Directory.CreateDirectory( ctx.ConfDirectory );
 			File.WriteAllText( PacPath, BuildPacContent() );
 			progress.Report( $"Created: {PacPath}" );
 			return Task.FromResult( new SetupStepResult( true, "PAC file created." ) );

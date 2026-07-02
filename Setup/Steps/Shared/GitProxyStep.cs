@@ -9,7 +9,6 @@ public class GitProxyStep : ISetupStep
 	public string Description => $"Sets the global git proxy for tfs.acsgs.com to route through {AppSettings.DefaultProxyAddress}.";
 	public bool RequiresElevation => false;
 	public bool IsManual => false;
-	public bool CanSkip => false;
 
 	public async Task<bool> IsApplicableAsync()
 	{

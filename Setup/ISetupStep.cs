@@ -6,7 +6,10 @@ public interface ISetupStep
 	string Description { get; }
 	bool RequiresElevation { get; }
 	bool IsManual { get; }
-	bool CanSkip { get; }
+	// False when repeating a completed step is unsafe or wasteful (key regeneration,
+	// duplicate rules, reinstalls) — Next then verifies completion instead of re-running.
+	bool RerunWhenComplete => true;
+	IReadOnlyList<SetupInput> Inputs => [];
 	Task<bool> IsApplicableAsync() => Task.FromResult( true );
 	Task<bool> IsAlreadyCompleteAsync();
 	Task<SetupStepResult> RunAsync( IProgress<string> progress );

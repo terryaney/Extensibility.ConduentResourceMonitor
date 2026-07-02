@@ -5,7 +5,7 @@ namespace ConduentResourceMonitor.Setup.Steps.Hub;
 public class InstallHubTunnelStep( SetupContext ctx ) : ISetupStep
 {
 	private readonly SetupContext _ctx = ctx;
-	private const string TunnelName = "Hub-Tunnel";
+	private const string TunnelName = SetupContext.HubTunnelName;
 	private static string ServiceName => $"WireGuardTunnel${TunnelName}";
 	private string ConfPath => Path.Combine( _ctx.ConfDirectory, $"{TunnelName}.conf" );
 
@@ -13,7 +13,8 @@ public class InstallHubTunnelStep( SetupContext ctx ) : ISetupStep
 	public string Description => $"Installs Hub-Tunnel.conf as a Windows service so WireGuard starts automatically.\r\nConf file: {ConfPath}";
 	public bool RequiresElevation => true;
 	public bool IsManual => false;
-	public bool CanSkip => false;
+	// installtunnelservice fails if the service already exists.
+	public bool RerunWhenComplete => false;
 
 	public Task<bool> IsAlreadyCompleteAsync()
 	{
@@ -45,9 +46,16 @@ public class InstallHubTunnelStep( SetupContext ctx ) : ISetupStep
 			}
 		};
 
-		await ProcessHelper.RunElevatedCommandsAsync( commands );
+		var (exitCode, output) = await ProcessHelper.RunElevatedCommandsWithOutputAsync( commands, progress.Report );
+		if ( exitCode != 0 )
+		{
+			var message = ProcessHelper.BuildElevatedFailureMessage( "Hub tunnel service install", exitCode, output );
+			progress.Report( message );
+			return new SetupStepResult( false, $"{message}\r\nCheck setup.log." );
+		}
+
 		var ok = await IsAlreadyCompleteAsync();
 		
-		return new SetupStepResult( ok, ok ? "Hub tunnel service installed." : "Service install may have failed. Check the command window output." );
+		return new SetupStepResult( ok, ok ? "Hub tunnel service installed." : "Service install may have failed. Check setup.log." );
 	}
 }

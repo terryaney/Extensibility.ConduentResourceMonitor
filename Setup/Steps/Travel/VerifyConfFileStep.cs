@@ -16,7 +16,7 @@ public class VerifyConfFileStep( SetupContext ctx ) : ISetupStep
         """;
 	public bool RequiresElevation => false;
 	public bool IsManual => false;
-	public bool CanSkip => false;
+	public IReadOnlyList<SetupInput> Inputs => [_ctx.ConfFilePathInput()];
 
 	public Task<bool> IsAlreadyCompleteAsync()
 	{

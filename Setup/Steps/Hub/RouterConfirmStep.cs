@@ -7,7 +7,7 @@ public class RouterConfirmStep( SetupContext ctx ) : ISetupStep
 	public string Title => "Router Configuration";
 	public bool RequiresElevation => false;
 	public bool IsManual => true;
-	public bool CanSkip => false;
+	public IReadOnlyList<SetupInput> Inputs => [_ctx.ResourceStaticIpInput()];
 
 	public string Description =>
 		$"""
@@ -22,7 +22,7 @@ public class RouterConfirmStep( SetupContext ctx ) : ISetupStep
         3. Enable port forwarding: port 51820 (UDP) → Hub's static IP
            (AmpliFi: Settings → Port Forwarding → Add)
 
-        Once done, click 'Mark Done' to continue.
+        When finished, click Next to continue.
         """;
 
 	// Always re-shown — requires user confirmation every time
