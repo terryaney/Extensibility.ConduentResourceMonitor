@@ -63,7 +63,7 @@ public class SettingsForm : Form
 		{
 			Dock = DockStyle.Fill,
 			ColumnCount = 2,
-			RowCount = 9,
+			RowCount = 12,
 			Padding = new Padding( 12, 12, 12, 4 ),
 			AutoSize = false
 		};
@@ -87,7 +87,7 @@ public class SettingsForm : Form
 		
 		layout.Controls.Add( _modeCombo );
 
-		// Rows 1-7: text fields
+		// Rows 1-10: text fields (sync rows are Resource-mode-only, hidden otherwise)
 		AddField( layout, "Check URL", nameof( AppSettings.CheckUrl ), settings.CheckUrl );
 		AddField( layout, "Proxy Address", nameof( AppSettings.ProxyAddress ), settings.ProxyAddress );
 		AddField( layout, "Tunnel Name", nameof( AppSettings.TunnelName ), settings.TunnelName );
@@ -95,6 +95,9 @@ public class SettingsForm : Form
 		AddField( layout, "PAC Port", nameof( AppSettings.PacPort ), settings.PacPort.ToString() );
 		AddField( layout, "Check Interval (s)", nameof( AppSettings.CheckIntervalSeconds ), settings.CheckIntervalSeconds.ToString() );
 		AddField( layout, "Notify Timeout (ms)", nameof( AppSettings.NotifyTimeoutMs ), settings.NotifyTimeoutMs.ToString() );
+		AddField( layout, "Hub Sync Path", nameof( AppSettings.HubSyncPath ), settings.HubSyncPath );
+		AddField( layout, "Resource Sync Path", nameof( AppSettings.ResourceSyncPath ), settings.ResourceSyncPath );
+		AddField( layout, "Sync Ignore Patterns", nameof( AppSettings.SyncIgnorePatterns ), settings.SyncIgnorePatterns );
 
 		// Watch for manual edits to TunnelName so we stop auto-updating it
 		_fields[ nameof( AppSettings.TunnelName ) ].TextChanged += ( _, _ ) =>
@@ -108,7 +111,7 @@ public class SettingsForm : Form
 			if ( !_settingProxyAddress ) _proxyAddressModified = true;
 		};
 
-		// Row 8: note
+		// Row 11: note
 		var note = new Label
 		{
 			Text = "Proxy Address changes take effect on next check.",
@@ -117,7 +120,7 @@ public class SettingsForm : Form
 			Dock = DockStyle.Fill,
 			Height = 24
 		};
-		layout.Controls.Add( note, 0, 8 );
+		layout.Controls.Add( note, 0, 11 );
 		layout.SetColumnSpan( note, 2 );
 
 		// Add to form in docking order: Fill first, then Top, then Bottom
@@ -176,6 +179,11 @@ public class SettingsForm : Form
 			_fields[ key ].Visible = !isResource;
 			_labels[ key ].Visible = !isResource;
 		}
+		foreach ( var key in new[] { nameof( AppSettings.HubSyncPath ), nameof( AppSettings.ResourceSyncPath ), nameof( AppSettings.SyncIgnorePatterns ) } )
+		{
+			_fields[ key ].Visible = isResource;
+			_labels[ key ].Visible = isResource;
+		}
 	}
 
 	private void SaveSettings()
@@ -185,6 +193,9 @@ public class SettingsForm : Form
 		_settings.ProxyAddress = _fields[ nameof( AppSettings.ProxyAddress ) ].Text.Trim();
 		_settings.TunnelName = _fields[ nameof( AppSettings.TunnelName ) ].Text.Trim();
 		_settings.PacDirectory = _fields[ nameof( AppSettings.PacDirectory ) ].Text.Trim();
+		_settings.HubSyncPath = _fields[ nameof( AppSettings.HubSyncPath ) ].Text.Trim();
+		_settings.ResourceSyncPath = _fields[ nameof( AppSettings.ResourceSyncPath ) ].Text.Trim();
+		_settings.SyncIgnorePatterns = _fields[ nameof( AppSettings.SyncIgnorePatterns ) ].Text.Trim();
 		if ( int.TryParse( _fields[ nameof( AppSettings.PacPort ) ].Text, out var port ) ) _settings.PacPort = port;
 		if ( int.TryParse( _fields[ nameof( AppSettings.CheckIntervalSeconds ) ].Text, out var interval ) ) _settings.CheckIntervalSeconds = interval;
 		if ( int.TryParse( _fields[ nameof( AppSettings.NotifyTimeoutMs ) ].Text, out var timeout ) ) _settings.NotifyTimeoutMs = timeout;

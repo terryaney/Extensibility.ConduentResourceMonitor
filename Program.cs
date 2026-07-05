@@ -9,6 +9,7 @@ internal static class Program
 {
 	private const int AttachParentProcess = -1;
 	private const int HelpColumnWidth = 34;
+	private const string AppUserModelId = "KAT.ResourceMonitor";
 
 	private static readonly IReadOnlyDictionary<string, OptionHelpMetadata> OptionHelpByProperty =
 		typeof( Options )
@@ -25,9 +26,17 @@ internal static class Program
 	[DllImport( "kernel32.dll" )]
 	private static extern bool AttachConsole( int dwProcessId );
 
+	[DllImport( "shell32.dll", CharSet = CharSet.Unicode )]
+	private static extern int SetCurrentProcessExplicitAppUserModelID( string AppID );
+
 	[STAThread]
 	static void Main( string[] args )
 	{
+		// Without a stable AUMID, WinForms auto-generates a new random one for the tray icon on
+		// every launch, so Windows never builds a persistent notification history/settings entry
+		// for the app — balloon tips show once and vanish instead of appearing in Action Center.
+		_ = SetCurrentProcessExplicitAppUserModelID( AppUserModelId );
+
 		Application.SetHighDpiMode( HighDpiMode.SystemAware );
 		Application.EnableVisualStyles();
 		Application.SetCompatibleTextRenderingDefault( false );
@@ -120,6 +129,9 @@ internal static class Program
 			PacPort = options.PacPort ?? settings.PacPort,
 			ResourceStaticIp = mode == SetupMode.Hub ? settings.ResourceStaticIp : "",
 			HubStaticIp = mode == SetupMode.Resource ? settings.HubStaticIp : "",
+			HubSyncPath = mode == SetupMode.Resource ? settings.HubSyncPath : "",
+			ResourceSyncPath = mode == SetupMode.Resource ? settings.ResourceSyncPath : "",
+			SyncIgnorePatterns = mode == SetupMode.Resource ? settings.SyncIgnorePatterns : "",
 			ConfFilePath = options.ConfFile ?? ( mode == SetupMode.Travel ? settings.ConfFilePath : "" )
 		};
 

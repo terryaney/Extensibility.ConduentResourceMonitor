@@ -14,6 +14,9 @@ public class SetupContext
 
 	// Resource-specific
 	public string HubStaticIp { get; set; } = "";
+	public string HubSyncPath { get; set; } = "";
+	public string ResourceSyncPath { get; set; } = "";
+	public string SyncIgnorePatterns { get; set; } = "";
 
 	// Travel-specific
 	public string ConfFilePath { get; set; } = "";
@@ -97,6 +100,38 @@ public class SetupContext
 		Validate = v => SetupInput.RequiredIPv4( v, "Hub Static LAN IP" )
 	};
 
+	public SetupInput HubSyncPathInput() => new()
+	{
+		Label = "Hub Sync Path",
+		Kind = SetupInputKind.FolderPath,
+		Placeholder = @"Folder under the Hub account's OneDrive root (blank = sync off)",
+		Get = () => HubSyncPath,
+		Set = v => HubSyncPath = v,
+		Validate = v => string.IsNullOrWhiteSpace( v ) || Directory.Exists( v )
+			? null
+			: $"Folder not found: {v}"
+	};
+
+	public SetupInput ResourceSyncPathInput() => new()
+	{
+		Label = "Resource Sync Path",
+		Kind = SetupInputKind.FolderPath,
+		Placeholder = @"Folder under the Resource account's OneDrive root (blank = sync off)",
+		Get = () => ResourceSyncPath,
+		Set = v => ResourceSyncPath = v,
+		Validate = v => string.IsNullOrWhiteSpace( v ) || Directory.Exists( v )
+			? null
+			: $"Folder not found: {v}"
+	};
+
+	public SetupInput SyncIgnorePatternsInput() => new()
+	{
+		Label = "Sync Ignore Patterns",
+		Placeholder = "Semicolon-delimited file-name patterns",
+		Get = () => SyncIgnorePatterns,
+		Set = v => SyncIgnorePatterns = v
+	};
+
 	// Persist wizard-collected inputs so subsequent setup runs pre-populate them.
 	public void PersistInputs( SetupMode mode )
 	{
@@ -112,6 +147,10 @@ public class SetupContext
 				break;
 			case SetupMode.Resource:
 				if ( HubStaticIp.Length > 0 ) settings.HubStaticIp = HubStaticIp;
+				// Sync paths persist unconditionally — clearing a path in setup turns the feature off.
+				settings.HubSyncPath = HubSyncPath;
+				settings.ResourceSyncPath = ResourceSyncPath;
+				if ( SyncIgnorePatterns.Length > 0 ) settings.SyncIgnorePatterns = SyncIgnorePatterns;
 				break;
 		}
 		settings.Save();

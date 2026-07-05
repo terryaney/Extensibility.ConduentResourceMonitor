@@ -1,7 +1,9 @@
 using System.Drawing.Drawing2D;
+using System.Reflection;
 using ConduentResourceMonitor.Checks;
 using ConduentResourceMonitor.Repairs;
 using ConduentResourceMonitor.Services;
+using ConduentResourceMonitor.Services.Sync;
 
 namespace ConduentResourceMonitor;
 
@@ -20,6 +22,14 @@ public class TrayApp : ApplicationContext
 	private readonly object _repairLock = new();
 	private readonly Icon _greenIcon;
 	private readonly Icon _redIcon;
+	private readonly Icon _greenSyncIcon;
+	private FolderSyncService? _sync;
+	private SyncStatus? _syncStatus;
+	private bool _lastAllOk = true;
+	private string _checkLinesText;
+	private bool _syncErrorBalloonShown;
+	private readonly HashSet<string> _notifiedHydrating = new( StringComparer.OrdinalIgnoreCase );
+	private bool _shuttingDown;
 
 	public TrayApp( AppSettings settings, bool showLog, bool repairOnStart = false )
 	{
@@ -28,6 +38,8 @@ public class TrayApp : ApplicationContext
 
 		_greenIcon = CreateCircleIcon( Color.LimeGreen );
 		_redIcon = CreateCircleIcon( Color.Red );
+		_greenSyncIcon = LoadSyncIcon();
+		_checkLinesText = $"{_mode} Monitor - Starting...";
 
 		_logForm = new LogForm();
 
@@ -60,6 +72,9 @@ public class TrayApp : ApplicationContext
 			Visible = true,
 			ContextMenuStrip = BuildContextMenu()
 		};
+
+		if ( _mode == AppMode.Resource && settings.SyncConfigured )
+			StartSyncService();
 
 		if ( showLog ) _logForm.Show();
 
@@ -137,11 +152,9 @@ public class TrayApp : ApplicationContext
 
 	private void OnResultsUpdated( IReadOnlyList<CheckResult> results )
 	{
-		var allOk = results.All( r => r.Ok );
-		_tray.Icon = allOk ? _greenIcon : _redIcon;
-
-		var parts = results.Select( r => $"{r.Name}: {( r.Ok ? "OK" : "FAIL" )}" );
-		_tray.Text = string.Join( Environment.NewLine, parts );
+		_lastAllOk = results.All( r => r.Ok );
+		_checkLinesText = string.Join( Environment.NewLine, results.Select( r => $"{r.Name}: {( r.Ok ? "OK" : "FAIL" )}" ) );
+		UpdateTrayPresentation();
 
 		var ts = DateTime.Now.ToString( "HH:mm:ss" );
 		foreach ( var r in results )
@@ -167,12 +180,103 @@ public class TrayApp : ApplicationContext
 		}
 	}
 
+	private void StartSyncService()
+	{
+		_sync = new FolderSyncService( _settings, _logForm.AppendLine );
+		_sync.StatusChanged += OnSyncStatus;
+		_sync.Start();
+	}
+
+	private void RestartSyncService()
+	{
+		_sync?.Stop();
+		_sync?.Dispose();
+		_sync = null;
+		_syncStatus = null;
+		_syncErrorBalloonShown = false;
+		_notifiedHydrating.Clear();
+		if ( _mode == AppMode.Resource && _settings.SyncConfigured )
+			StartSyncService();
+		UpdateTrayPresentation();
+	}
+
+	private void OnSyncStatus( SyncStatus status )
+	{
+		_syncStatus = status;
+
+		// One balloon per healthy→erroring transition; recovery re-arms it
+		if ( status.ErrorCount > 0 && !_syncErrorBalloonShown )
+		{
+			_syncErrorBalloonShown = true;
+			if ( !_shuttingDown )
+				_tray.ShowBalloonTip(
+					_settings.NotifyTimeoutMs,
+					$"{_mode} Monitor - Sync Errors",
+					status.LastError ?? $"{status.ErrorCount} sync errors — see sync.log.",
+					ToolTipIcon.Warning
+				);
+		}
+		else if ( status.ErrorCount == 0 )
+			_syncErrorBalloonShown = false;
+
+		// One balloon per folder the first time it appears pending hydration; a folder dropping out
+		// of the set re-arms it so a later re-occurrence (e.g. a different large folder) notifies again.
+		var stillPending = new HashSet<string>( status.PendingHydration, StringComparer.OrdinalIgnoreCase );
+		foreach ( var dir in status.PendingHydration )
+		{
+			if ( _notifiedHydrating.Add( dir ) && !_shuttingDown )
+				_tray.ShowBalloonTip(
+					_settings.NotifyTimeoutMs,
+					$"{_mode} Monitor - Sync Waiting",
+					$"'{dir}' is still downloading from OneDrive — sync will start automatically once it finishes.",
+					ToolTipIcon.Info
+				);
+		}
+		_notifiedHydrating.RemoveWhere( dir => !stillPending.Contains( dir ) );
+
+		UpdateTrayPresentation();
+	}
+
+	// Single owner of icon + tooltip so check results and sync status can't fight over them.
+	// Glyph = arrows only while a reconcile pass is actively in progress (always green in that
+	// state); otherwise a plain circle colored by the monitored checks. Sync errors alone never
+	// affect color.
+	private void UpdateTrayPresentation()
+	{
+		var reconciling = _syncStatus is { Reconciling: true };
+		_tray.Icon = reconciling
+			? _greenSyncIcon
+			: ( _lastAllOk ? _greenIcon : _redIcon );
+
+		var text = _checkLinesText;
+		if ( _sync != null && _syncStatus != null )
+		{
+			text += Environment.NewLine + BuildSyncLine( _syncStatus );
+			if ( _syncStatus.TrashFileCount > 0 )
+				text += Environment.NewLine + $"SyncTrash: {_syncStatus.TrashFileCount} files";
+		}
+
+		// NotifyIcon.Text throws over 127 chars — truncating also fixes a latent bug where many
+		// long check names could previously blow the limit
+		_tray.Text = text.Length <= 127 ? text : text[ ..127 ];
+	}
+
+	private static string BuildSyncLine( SyncStatus status )
+	{
+		if ( status.Paused ) return "Sync: Paused";
+		if ( status.ErrorCount > 0 ) return $"Sync: {status.ErrorCount} errors";
+		if ( status.PendingHydration.Count > 0 ) return $"Sync: waiting on OneDrive ({status.PendingHydration.Count} folders)";
+		return status.LastSyncLocal.HasValue ? $"Sync: OK (last {status.LastSyncLocal:HH:mm})" : "Sync: OK";
+	}
+
 	private void OnCheckFailed( CheckResult result )
 	{
+		if ( _shuttingDown ) return;
+
 		_tray.ShowBalloonTip(
 			_settings.NotifyTimeoutMs,
 			$"{_mode} Monitor - {result.Name} Failed",
-			result.Detail,
+			$"{result.Name} is no longer connected. See monitor for possible fixes.",
 			ToolTipIcon.Warning
 		);
 	}
@@ -205,6 +309,35 @@ public class TrayApp : ApplicationContext
 		if ( fixItems.Count > 0 )
 			menu.Items.Add( new ToolStripSeparator() );
 
+		if ( _sync != null )
+		{
+			var paused = _syncStatus?.Paused ?? _settings.SyncPaused;
+			var pauseItem = new ToolStripMenuItem( paused ? "Resume Syncing" : "Pause Syncing" );
+			pauseItem.Click += ( _, _ ) =>
+			{
+				_settings.SyncPaused = !paused;
+				_settings.Save();
+				if ( paused ) _sync.Resume();
+				else _sync.Pause();
+			};
+			menu.Items.Add( pauseItem );
+
+			var trashCount = _sync.GetTrashFileCount();
+			var purgeItem = new ToolStripMenuItem( $"Purge Sync Trash ({trashCount} files)" ) { Enabled = trashCount > 0 };
+			purgeItem.Click += ( _, _ ) =>
+			{
+				var confirm = MessageBox.Show(
+					$"Permanently delete {trashCount} file(s) from SyncTrash?",
+					"Conduent Resource Monitor",
+					MessageBoxButtons.YesNo,
+					MessageBoxIcon.Warning );
+				if ( confirm == DialogResult.Yes ) _sync.PurgeTrash();
+			};
+			menu.Items.Add( purgeItem );
+
+			menu.Items.Add( new ToolStripSeparator() );
+		}
+
 		var showLog = new ToolStripMenuItem( "Show Log" );
 		showLog.Click += ( _, _ ) => { _logForm.Show(); _logForm.BringToFront(); };
 		menu.Items.Add( showLog );
@@ -214,12 +347,17 @@ public class TrayApp : ApplicationContext
 		{
 			var oldPort = _settings.PacPort;
 			var oldDir = _settings.PacDirectory;
+			var oldHubSync = _settings.HubSyncPath;
+			var oldResSync = _settings.ResourceSyncPath;
+			var oldIgnore = _settings.SyncIgnorePatterns;
 			using var form = new SettingsForm( _settings, allowModeChange: false );
 			if ( form.ShowDialog() == DialogResult.OK )
 			{
 				_monitor.UpdateInterval( _settings.CheckIntervalSeconds );
 				if ( _settings.PacPort != oldPort || _settings.PacDirectory != oldDir )
 					_pacServer?.Restart();
+				if ( _settings.HubSyncPath != oldHubSync || _settings.ResourceSyncPath != oldResSync || _settings.SyncIgnorePatterns != oldIgnore )
+					RestartSyncService();
 			}
 		};
 		menu.Items.Add( settingsItem );
@@ -233,9 +371,11 @@ public class TrayApp : ApplicationContext
 
 	private void Shutdown()
 	{
+		_shuttingDown = true;
 		_monitor.Stop();
 		_pacServer?.Stop();
 		_proxyServer?.Stop();
+		_sync?.Stop();
 		_tray.Visible = false;
 		_tray.Dispose();
 		Application.Exit();
@@ -317,9 +457,11 @@ public class TrayApp : ApplicationContext
 			_monitor.Stop();
 			_pacServer?.Stop();
 			_proxyServer?.Stop();
+			_sync?.Dispose();
 			_logForm.Dispose();
 			_greenIcon.Dispose();
 			_redIcon.Dispose();
+			_greenSyncIcon.Dispose();
 		}
 		base.Dispose( disposing );
 	}
@@ -335,5 +477,13 @@ public class TrayApp : ApplicationContext
 		}
 		var hIcon = bmp.GetHicon();
 		return Icon.FromHandle( hIcon );
+	}
+
+	// Windows' own imageres.dll refresh glyph (icon index 229) — embedded as a project resource
+	// rather than hand-drawn, since it reads more polished than GDI+ arcs at tray size.
+	private static Icon LoadSyncIcon()
+	{
+		using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream( "ConduentResourceMonitor.Resources.SyncIcon.ico" )!;
+		return new Icon( stream );
 	}
 }

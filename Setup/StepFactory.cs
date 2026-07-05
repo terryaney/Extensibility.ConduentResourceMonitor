@@ -50,6 +50,7 @@ internal static class StepFactory
 	private static List<ISetupStep> BuildResource( SetupContext ctx ) =>
 	[
 		new VpnProxyFirewallStep(ctx),
+		new SyncFoldersStep(ctx),
 		new StartupShortcutStep(SetupMode.Resource, ctx),
 	];
 }

@@ -21,9 +21,19 @@ public class AppSettings
 	public string HubStaticIp { get; set; } = "";  // Resource: set during --setup Resource, pre-fills repeat runs; not used at app runtime
 	public int CheckIntervalSeconds { get; set; } = 30;
 	public int NotifyTimeoutMs { get; set; } = 5000;
+	public string HubSyncPath { get; set; } = "";  // Resource: local folder under the Hub account's OneDrive root
+	public string ResourceSyncPath { get; set; } = "";  // Resource: local folder under the Resource account's OneDrive root
+	public string SyncIgnorePatterns { get; set; } = "~$*;*.tmp;desktop.ini;Thumbs.db";  // semicolon-delimited file-name patterns
+	public bool SyncPaused { get; set; }  // tray-owned; persisted so pause survives restart
 
 	[JsonIgnore]
 	public AppMode? AppMode => Enum.TryParse<AppMode>( Mode, ignoreCase: true, out var m ) ? m : null;
+
+	[JsonIgnore]
+	public bool SyncConfigured =>
+		AppMode == ConduentResourceMonitor.AppMode.Resource &&
+		!string.IsNullOrWhiteSpace( HubSyncPath ) &&
+		!string.IsNullOrWhiteSpace( ResourceSyncPath );
 
 	[JsonIgnore]
 	public string ProxyUrl => BuildProxyUrl( ProxyAddress );
@@ -115,6 +125,22 @@ public class AppSettings
 				errors.Add( $"PAC Port must be between 1 and 65535 (got {PacPort})" );
 		}
 
+		// Sync folders are Resource-only and optional, but half-configured is always an error —
+		// blank both fields to turn the feature off.
+		var hubSet = !string.IsNullOrWhiteSpace( HubSyncPath );
+		var resSet = !string.IsNullOrWhiteSpace( ResourceSyncPath );
+		if ( hubSet != resSet )
+			errors.Add( "Hub Sync Path and Resource Sync Path must be set together (blank both to disable folder sync)" );
+		else if ( hubSet && resSet )
+		{
+			if ( !Directory.Exists( HubSyncPath ) )
+				errors.Add( $"Hub Sync Path does not exist: '{HubSyncPath}'" );
+			if ( !Directory.Exists( ResourceSyncPath ) )
+				errors.Add( $"Resource Sync Path does not exist: '{ResourceSyncPath}'" );
+			if ( Directory.Exists( HubSyncPath ) && Directory.Exists( ResourceSyncPath ) && ArePathsIdenticalOrNested( HubSyncPath, ResourceSyncPath ) )
+				errors.Add( "Hub Sync Path and Resource Sync Path must not be the same folder or nested inside each other" );
+		}
+
 		if ( CheckIntervalSeconds < 5 )
 			errors.Add( $"Check Interval must be at least 5 seconds (got {CheckIntervalSeconds})" );
 
@@ -122,5 +148,14 @@ public class AppSettings
 			errors.Add( $"Notify Timeout must be at least 1000ms (got {NotifyTimeoutMs})" );
 
 		return errors;
+	}
+
+	private static bool ArePathsIdenticalOrNested( string a, string b )
+	{
+		var fullA = Path.TrimEndingDirectorySeparator( Path.GetFullPath( a ) );
+		var fullB = Path.TrimEndingDirectorySeparator( Path.GetFullPath( b ) );
+		return fullA.Equals( fullB, StringComparison.OrdinalIgnoreCase )
+			|| fullA.StartsWith( fullB + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase )
+			|| fullB.StartsWith( fullA + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase );
 	}
 }

@@ -7,6 +7,7 @@ Conduent issues a laptop (`Resource`) with corporate VPN access. `Hub` is an alw
 This setup lets Hub and Travel machines reach corporate resources — internal URLs, TFS, tools — as if sitting on the corporate network:
 
 - `Resource` runs the tray monitor itself (`--mode Resource`), which natively exposes the corporate VPN as an HTTP proxy on port `8888` — no Python or third-party proxy tool involved.
+- `Resource` can optionally bridge two OneDrive accounts — see [OneDrive Bridge Folder Sync](#onedrive-bridge-folder-sync-resource-only) below — since it's the only machine with local access to both.
 - **WireGuard** creates an encrypted tunnel between `Hub` and each `Travel` machine. Each peer's `AllowedIPs` is scoped to a single `/32` address, so `Travel` can reach `Hub` itself (e.g. RDP straight to Hub) from anywhere — but not other devices on Hub's home LAN.
 - **Port forwarding** on `Hub` routes proxy and RDP traffic arriving over the WireGuard tunnel onward to `Resource`, since `Resource` is a separate device on Hub's LAN and isn't itself a WireGuard peer.
 - **PAC file** on `Hub` and `Travel` machines tells browsers which URLs to route through the proxy.
@@ -82,7 +83,7 @@ All keys are generated on Hub using `wg genkey` / `wg pubkey`. Keys have no mach
 
 ## Resource Monitor
 
-`ConduentResourceMonitor.exe` runs as a system tray application on `Hub`, `Travel`, and `Resource` machines. It shows a **green circle** when all checks pass and **red** when any fail. Hover text shows per-item status. A Windows notification fires on each new failure.
+`ConduentResourceMonitor.exe` runs as a system tray application on `Hub`, `Travel`, and `Resource` machines. It shows a **green circle** when all checks pass and **red** when any fail. When [folder sync](#onedrive-bridge-folder-sync-resource-only) is configured and active, the icon becomes **sync arrows** instead of a plain circle — still green/red based on the monitored checks only, since sync errors never change icon color. Hover text shows per-item status. A Windows notification fires on each new failure.
 
 ### What Each Mode Monitors
 
@@ -114,9 +115,11 @@ Fix actions appear only when the corresponding check is failing:
 - **Fix: Restart PAC Web Server** — Restarts the native PAC file listener. Hub/Travel only.
 - **Fix: Restart VPN Proxy** — Restarts the native proxy listener. Resource only.
 
+When [folder sync](#onedrive-bridge-folder-sync-resource-only) is configured, two more items appear (not tied to a failing check): **Pause Syncing** / **Resume Syncing**, and **Purge Sync Trash (N files)**.
+
 ### Settings
 
-Right-click → **Settings** to change any option persistently. Settings are saved to a single `ResourceMonitor.settings.json` next to the exe (the `Mode` field inside it tracks Hub vs Travel vs Resource — there's no separate file per mode). Command line args override at runtime without writing back. Tunnel Name / PAC Directory / PAC Port are hidden when Resource is selected, since Resource uses neither WireGuard nor PAC serving.
+Right-click → **Settings** to change any option persistently. Settings are saved to a single `ResourceMonitor.settings.json` next to the exe (the `Mode` field inside it tracks Hub vs Travel vs Resource — there's no separate file per mode). Command line args override at runtime without writing back. Tunnel Name / PAC Directory / PAC Port are hidden when Resource is selected, since Resource uses neither WireGuard nor PAC serving; Hub Sync Path / Resource Sync Path / Sync Ignore Patterns only show for Resource.
 
 ### Command Line Options
 
@@ -142,6 +145,21 @@ Right-click → **Settings** to change any option persistently. Settings are sav
 | `--add-travel-config` | Add a new Travel machine to an existing Hub configuration. |
 | `--conf-dir <path>` | Directory for WireGuard `.conf` files. Default: `C:\BTR\Extensibility\ConduentResource` |
 | `--conf-file <path>` | Travel setup: path to the `.conf` file generated on Hub. |
+
+---
+
+## OneDrive Bridge Folder Sync (Resource only)
+
+`Resource` is the only machine with local access to both the Hub account's and the Resource account's OneDrive. Setting `HubSyncPath` and `ResourceSyncPath` (both required together — blank either to turn the feature off) mirrors matching top-level folders between the two local OneDrive roots, letting the OneDrive clients handle the actual cloud transport.
+
+- **Which folders sync**: top-level directories under `HubSyncPath` define the sync set; same-named directories under `ResourceSyncPath` mirror them recursively. Other content at the Resource root is ignored.
+- **Automatic pinning + hydration wait**: the app pins each matching top-level folder itself (recursively, the instant it becomes managed) — no Explorer action required, ever. Pinning is instant (metadata only); actually reading/copying a folder's content waits until it's fully hydrated (no cloud-only placeholders left, on both sides), so the engine never triggers a synchronous OneDrive download mid-reconcile. A folder still downloading is skipped for content sync only (existence/orphan checks are unaffected), shown in the tray as "waiting on OneDrive", with one balloon per app launch — it self-heals into normal sync as soon as hydration finishes, no restart needed.
+- **Deletes are safe**: a file deleted on one side is soft-deleted — the other side's copy moves to `SyncTrash\` (app directory) instead of being erased. Right-click → **Purge Sync Trash** to empty it once you're sure. Deleting an entire top-level folder from the **Hub** side is treated as an orphan (Resource's copy is left alone, sync just stops for that folder); deleting a top-level folder from the **Resource** side is an ordinary delete (Hub's copies go to SyncTrash).
+- **Conflicts** (both sides edited a file since last sync): the newer file wins; the older version is preserved in `SyncConflict\` (app directory) rather than lost.
+- **Activity log**: `sync.log` next to the exe (also shown in the log window).
+- **Pause/Resume**: via the tray right-click menu; persists across restarts.
+
+Setup Resource wizard step: [Setup/readme.md](Setup/readme.md#resource-steps) collects both paths and a semicolon-delimited ignore-pattern list (default `~$*;*.tmp;desktop.ini;Thumbs.db`) — pinning and hydration-waiting happen automatically once the monitor is running, so the step doesn't check either.
 
 ---
 

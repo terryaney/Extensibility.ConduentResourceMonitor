@@ -381,7 +381,7 @@ public class SetupWizardForm : Form
 				var btn = MakeInputButton( "..." );
 				btn.Click += ( _, _ ) =>
 				{
-					using var dlg = new FolderBrowserDialog { SelectedPath = tb.Text.Trim(), Description = $"Select {input.Label}" };
+					using var dlg = new FolderBrowserDialog { SelectedPath = tb.Text.Trim(), Description = $"Select {input.Label}", UseDescriptionForTitle = true };
 					if ( dlg.ShowDialog( this ) == DialogResult.OK ) tb.Text = dlg.SelectedPath;
 				};
 				return btn;

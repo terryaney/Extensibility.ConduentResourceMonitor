@@ -62,7 +62,10 @@ Hub's static LAN IP (assigned during router setup — see [Router Setup](#router
 | # | Step | Type | Elevation | Already-Complete Check |
 |---|---|---|---|---|
 | 1 | Configure Proxy Firewall Rule | Auto | Yes | `netsh advfirewall firewall show rule name="CRM - VPN Proxy"` returns data |
-| 2 | Create Startup Shortcut | Auto | No | Shortcut `.lnk` exists in Startup folder |
+| 2 | Configure Sync Folders | Auto | No | Both paths blank, OR both exist and not nested in each other |
+| 3 | Create Startup Shortcut | Auto | No | Shortcut `.lnk` exists in Startup folder |
+
+Configure Sync Folders is optional — leave both paths blank to skip it. When set, it collects `HubSyncPath`, `ResourceSyncPath`, and a semicolon-delimited `SyncIgnorePatterns` list, and validates both exist and aren't nested inside each other. Pinning and hydration-waiting are no longer part of setup — they happen automatically once the monitor is running. See [OneDrive Bridge Folder Sync](#onedrive-bridge-folder-sync-resource) below.
 
 Resource runs no Python, pip, or third-party proxy tool — the corporate VPN is exposed on port `8888` by the tray monitor itself, running as `--mode Resource`. It also doesn't get the Developer Settings File — `conduent-resource` (used inside that file) only resolves via a hosts-file entry that Hub/Travel get, not Resource, so writing it there would point at a hostname Resource can't itself reach.
 
@@ -242,6 +245,19 @@ netsh advfirewall firewall show rule name="CRM - VPN Proxy" verbose
 ```
 
 `remoteip` only ever needs Hub's static LAN IP — Travel never talks to Resource directly, it reaches `conduent-resource:8888` via the WireGuard tunnel to Hub, and Hub's own `netsh portproxy` rule forwards it onward. The `delete` first makes this safe to re-run if Hub's IP ever changes.
+
+---
+
+### OneDrive Bridge Folder Sync (Resource)
+
+The wizard's "Configure Sync Folders" step handles collecting paths and validating them; this section covers the runtime behavior for troubleshooting.
+
+- **Settings**: `HubSyncPath`, `ResourceSyncPath` (both required together — blank both to disable), `SyncIgnorePatterns` (default `~$*;*.tmp;desktop.ini;Thumbs.db`), all in `ResourceMonitor.settings.json`.
+- **Sync set**: top-level directories under `HubSyncPath` define what syncs; same-named directories under `ResourceSyncPath` mirror recursively.
+- **State files** (all next to the exe): `sync.ledger.json` (last-known per-side state, powers delete/orphan detection — deleting it forces a first-run additive merge on next start), `sync.log` (activity, 1MB rollover to `sync.log.1`), `SyncTrash\` (soft-deleted files, `{relPath}.{yyyyMMdd-HHmmss}`), `SyncConflict\` (losing side of a conflict, `{name}.{Hub|Resource}.{stamp}`).
+- **Auto-pin + hydration gate**: the app sets `FILE_ATTRIBUTE_PINNED` itself on each matching top-level folder (recursively, the moment it becomes managed) — instant, no waiting, since it's a metadata-only flip. Actually syncing that folder's content is gated separately on hydration (`FILE_ATTRIBUTE_RECALL_ON_DATA_ACCESS` clear on every file, both sides) so the engine never blocks on a live OneDrive download; a not-yet-hydrated folder is skipped for content sync only and self-heals into normal sync once hydration finishes, no restart needed.
+- **Engine**: two `FileSystemWatcher`s (one per root) feed a debounced (~3s quiet window) targeted reconcile of the affected top-level folder, plus a full reconcile every 10 minutes and at startup.
+- **Tray controls**: right-click → Pause Syncing / Resume Syncing (persists across restarts) and Purge Sync Trash (confirms, then empties `SyncTrash\`).
 
 ---
 
