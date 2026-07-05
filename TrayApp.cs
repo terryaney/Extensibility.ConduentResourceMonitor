@@ -63,7 +63,7 @@ public class TrayApp : ApplicationContext
 
 		_monitor = new MonitorService( checks, settings.CheckIntervalSeconds );
 		_monitor.ResultsUpdated += OnResultsUpdated;
-		_monitor.CheckFailed += OnCheckFailed;
+		_monitor.ChecksFailed += OnChecksFailed;
 
 		_tray = new NotifyIcon
 		{
@@ -269,16 +269,29 @@ public class TrayApp : ApplicationContext
 		return status.LastSyncLocal.HasValue ? $"Sync: OK (last {status.LastSyncLocal:HH:mm})" : "Sync: OK";
 	}
 
-	private void OnCheckFailed( CheckResult result )
+	private void OnChecksFailed( IReadOnlyList<CheckResult> results )
 	{
 		if ( _shuttingDown ) return;
 
-		_tray.ShowBalloonTip(
-			_settings.NotifyTimeoutMs,
-			$"{_mode} Monitor - {result.Name} Failed",
-			$"{result.Name} is no longer connected. See monitor for possible fixes.",
-			ToolTipIcon.Warning
-		);
+		if ( results.Count == 1 )
+		{
+			var r = results[ 0 ];
+			_tray.ShowBalloonTip(
+				_settings.NotifyTimeoutMs,
+				$"{_mode} Monitor - {r.Name} Failed",
+				$"{r.Name} is no longer connected. See monitor for possible fixes.",
+				ToolTipIcon.Warning
+			);
+		}
+		else
+		{
+			_tray.ShowBalloonTip(
+				_settings.NotifyTimeoutMs,
+				$"{_mode} Monitor - Multiple Issues",
+				$"{string.Join( ", ", results.Select( r => r.Name ) )} are no longer connected. See monitor for possible fixes.",
+				ToolTipIcon.Warning
+			);
+		}
 	}
 
 	private ContextMenuStrip BuildContextMenu()
