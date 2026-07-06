@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using System.Reflection;
 using ConduentResourceMonitor.Checks;
@@ -375,6 +376,13 @@ public class TrayApp : ApplicationContext
 		};
 		menu.Items.Add( settingsItem );
 
+		if ( _pacServer != null )
+		{
+			var viewPac = new ToolStripMenuItem( "View PAC File" ) { Enabled = File.Exists( Path.Combine( _settings.PacDirectory, _settings.PacFileName ) ) };
+			viewPac.Click += ( _, _ ) => OpenPacFileInEditor();
+			menu.Items.Add( viewPac );
+		}
+
 		menu.Items.Add( new ToolStripSeparator() );
 
 		var exit = new ToolStripMenuItem( "Exit" );
@@ -443,6 +451,19 @@ public class TrayApp : ApplicationContext
 
 		_ = RunRepairAsync( repair );
 		return true;
+	}
+
+	private void OpenPacFileInEditor()
+	{
+		var path = Path.Combine( _settings.PacDirectory, _settings.PacFileName );
+		try
+		{
+			Process.Start( new ProcessStartInfo { FileName = "code", Arguments = $"\"{path}\"", UseShellExecute = true } );
+		}
+		catch ( Exception ex )
+		{
+			AppendRepairLog( $"Failed to open PAC file in VS Code: {ex.Message}" );
+		}
 	}
 
 	private void AppendRepairLog( string line )
