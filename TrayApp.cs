@@ -25,6 +25,8 @@ public class TrayApp : ApplicationContext
 	private readonly Icon _redIcon;
 	private readonly Icon _greenSyncIcon;
 	private FolderSyncService? _sync;
+	private readonly SyncLog _monitorLog;
+	private readonly Dictionary<string, bool> _lastCheckOk = new( StringComparer.OrdinalIgnoreCase );
 	private SyncStatus? _syncStatus;
 	private bool _lastAllOk = true;
 	private string _checkLinesText;
@@ -43,20 +45,21 @@ public class TrayApp : ApplicationContext
 		_checkLinesText = $"{_mode} Monitor - Starting...";
 
 		_logForm = new LogForm();
+		_monitorLog = new SyncLog( Path.Combine( AppContext.BaseDirectory, "monitor.log" ), mirror: _logForm.AppendLine );
 
 		if ( _mode == AppMode.Resource )
 		{
 			_proxyServer = new ProxyServerService();
 			_proxyServer.Start();
 			if ( _proxyServer.LastError != null )
-				_logForm.AppendLine( $"[{DateTime.Now:HH:mm:ss}] VPN Proxy failed to start: {_proxyServer.LastError}" );
+				_monitorLog.Line( $"VPN Proxy failed to start: {_proxyServer.LastError}" );
 		}
 		else
 		{
 			_pacServer = new PacServerService( settings );
 			_pacServer.Start();
 			if ( _pacServer.LastError != null )
-				_logForm.AppendLine( $"[{DateTime.Now:HH:mm:ss}] PAC Web Server failed to start: {_pacServer.LastError}" );
+				_monitorLog.Line( $"PAC Web Server failed to start: {_pacServer.LastError}" );
 		}
 
 		var checks = BuildChecks( _mode, settings );
@@ -64,7 +67,6 @@ public class TrayApp : ApplicationContext
 
 		_monitor = new MonitorService( checks, settings.CheckIntervalSeconds );
 		_monitor.ResultsUpdated += OnResultsUpdated;
-		_monitor.ChecksFailed += OnChecksFailed;
 
 		_tray = new NotifyIcon
 		{
@@ -157,17 +159,28 @@ public class TrayApp : ApplicationContext
 		_checkLinesText = string.Join( Environment.NewLine, results.Select( r => $"{r.Name}: {( r.Ok ? "OK" : "FAIL" )}" ) );
 		UpdateTrayPresentation();
 
-		var ts = DateTime.Now.ToString( "HH:mm:ss" );
 		foreach ( var r in results )
-			_logForm.AppendLine( $"[{ts}] {r.Name}: {( r.Ok ? "OK" : "FAIL" )} ({r.Detail})" );
+			_monitorLog.Line( $"{r.Name}: {( r.Ok ? "OK" : "FAIL" )} ({r.Detail})" );
 
 		foreach ( var r in results )
 		{
 			if ( r.Ok )
 			{
 				_repairAttempts[ r.Name ] = 0;
+				_lastCheckOk[ r.Name ] = true;
 				continue;
 			}
+
+			var wasKnownOk = _lastCheckOk.TryGetValue( r.Name, out var wasOk ) && wasOk;
+			if ( wasKnownOk && !_shuttingDown )
+				_tray.ShowBalloonTip(
+					_settings.NotifyTimeoutMs,
+					$"{_mode} Monitor - {r.Name} Failed",
+					$"{r.Name} is no longer connected. See monitor for possible fixes.",
+					ToolTipIcon.Warning
+				);
+
+			_lastCheckOk[ r.Name ] = false;
 
 			var attempts = _repairAttempts.GetValueOrDefault( r.Name, 0 );
 			if ( attempts >= 2 ) continue;
@@ -177,7 +190,7 @@ public class TrayApp : ApplicationContext
 			if ( !QueueRepair( repair ) ) continue;
 
 			_repairAttempts[ r.Name ] = attempts + 1;
-			_logForm.AppendLine( $"[{ts}] AUTO-REPAIR ({attempts + 1}/2): {repair.Label}" );
+			_monitorLog.Line( $"AUTO-REPAIR ({attempts + 1}/2): {repair.Label}" );
 		}
 	}
 
@@ -196,6 +209,7 @@ public class TrayApp : ApplicationContext
 		_syncStatus = null;
 		_syncErrorBalloonShown = false;
 		_notifiedHydrating.Clear();
+		_lastCheckOk.Clear();
 		if ( _mode == AppMode.Resource && _settings.SyncConfigured )
 			StartSyncService();
 		UpdateTrayPresentation();
@@ -268,31 +282,6 @@ public class TrayApp : ApplicationContext
 		if ( status.ErrorCount > 0 ) return $"Sync: {status.ErrorCount} errors";
 		if ( status.PendingHydration.Count > 0 ) return $"Sync: waiting on OneDrive ({status.PendingHydration.Count} folders)";
 		return status.LastSyncLocal.HasValue ? $"Sync: OK (last {status.LastSyncLocal:HH:mm})" : "Sync: OK";
-	}
-
-	private void OnChecksFailed( IReadOnlyList<CheckResult> results )
-	{
-		if ( _shuttingDown ) return;
-
-		if ( results.Count == 1 )
-		{
-			var r = results[ 0 ];
-			_tray.ShowBalloonTip(
-				_settings.NotifyTimeoutMs,
-				$"{_mode} Monitor - {r.Name} Failed",
-				$"{r.Name} is no longer connected. See monitor for possible fixes.",
-				ToolTipIcon.Warning
-			);
-		}
-		else
-		{
-			_tray.ShowBalloonTip(
-				_settings.NotifyTimeoutMs,
-				$"{_mode} Monitor - Multiple Issues",
-				$"{string.Join( ", ", results.Select( r => r.Name ) )} are no longer connected. See monitor for possible fixes.",
-				ToolTipIcon.Warning
-			);
-		}
 	}
 
 	private ContextMenuStrip BuildContextMenu()
@@ -468,8 +457,7 @@ public class TrayApp : ApplicationContext
 
 	private void AppendRepairLog( string line )
 	{
-		var ts = DateTime.Now.ToString( "HH:mm:ss" );
-		_logForm.AppendLine( $"[{ts}] {line}" );
+		_monitorLog.Line( line );
 	}
 
 	private bool TryStartRepair( string targetCheckName )
